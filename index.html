@@ -752,19 +752,12 @@
       <div class="notif-row">
         <div>
           <div class="notif-row-label">ブラウザ通知</div>
-          <p class="notif-row-desc">PC・スマホのOSレベルで通知を受け取ります。バックグラウンドでも届きます。</p>
+          <p class="notif-row-desc">アプリを開いたとき、締切・割当・ステータス変更を通知します。</p>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
           <span class="push-status-badge" id="pushStatusBadge">未設定</span>
           <button class="btn secondary small" onclick="registerPushNotifications()">有効にする</button>
         </div>
-      </div>
-
-      <!-- Discord Webhook -->
-      <div class="notif-row" style="flex-direction:column;">
-        <div class="notif-row-label">Discord 通知 Webhook URL</div>
-        <p class="notif-row-desc" style="margin-bottom:8px;">DiscordチャンネルのWebhook URLを入力すると、そのチャンネルに通知が届きます。</p>
-        <input type="url" id="discordWebhookUrl" placeholder="https://discord.com/api/webhooks/..." style="width:100%;box-sizing:border-box;">
       </div>
 
       <!-- タイミング -->
@@ -773,7 +766,7 @@
         <label class="notif-check" style="margin-top:10px;"><input type="checkbox" id="notifyOnAssigned"> タスクが自分に割り当てられたとき</label>
         <label class="notif-check"><input type="checkbox" id="notifyOnStatus"> タスクのステータスが変更されたとき</label>
         <div style="margin-top:12px;">
-          <div style="font-size:13px;font-weight:600;margin-bottom:6px;">締切通知（毎朝8時）</div>
+          <div style="font-size:13px;font-weight:600;margin-bottom:6px;">締切通知（アプリを開いたとき）</div>
           <div class="notif-timing-group">
             <label class="notif-check"><input type="checkbox" id="notifyDay3"> 3日前</label>
             <label class="notif-check"><input type="checkbox" id="notifyDay2"> 2日前</label>
@@ -1213,11 +1206,62 @@ async function saveNotificationSettings(){
   const settings = {
     deadlineDays: days,
     onAssigned: !!document.getElementById('notifyOnAssigned')?.checked,
-    onStatusChange: !!document.getElementById('notifyOnStatus')?.checked,
-    discordWebhookUrl: document.getElementById('discordWebhookUrl')?.value.trim() || ''
+    onStatusChange: !!document.getElementById('notifyOnStatus')?.checked
   };
-  await fbDb.ref('notificationSettings').set(settings);
+  await fbDb.ref(`notificationSettings`).set(settings);
   showToast('通知設定を保存しました');
+}
+
+// アプリ起動時に締切タスクをチェックして通知
+async function checkDeadlineNotifications(){
+  if(Notification.permission !== 'granted') return;
+  try{
+    const snap = await fbDb.ref('notificationSettings').once('value');
+    const s = snap.val() || {};
+    const days = s.deadlineDays ?? [0, 1];
+    if(days.length === 0) return;
+    const today = new Date(); today.setHours(0,0,0,0);
+    // 本日通知済みか確認
+    const sentKey = `sentNotifications/${todayStr()}/_deadline_check_${currentGoogleUser?.uid||'anon'}`;
+    const sent = await fbDb.ref(sentKey).once('value');
+    if(sent.exists()) return;
+    const targets = state.tasks.filter(t => {
+      if(!t.deadline || t.status === '完了') return false;
+      if(currentRole === 'member' && t.assigneeId !== currentMemberId) return false;
+      const dl = new Date(t.deadline + 'T00:00:00');
+      const diff = Math.round((dl - today) / 86400000);
+      return days.includes(diff);
+    });
+    if(targets.length === 0) return;
+    await fbDb.ref(sentKey).set(true);
+    targets.forEach(t => {
+      const dl = new Date(t.deadline + 'T00:00:00');
+      const diff = Math.round((dl - today) / 86400000);
+      const label = diff === 0 ? '本日締切' : `${diff}日後に締切`;
+      new Notification(`⏰ ${label}: ${t.title}`, { body: `締切: ${t.deadline}`, tag: `deadline_${t.id}` });
+    });
+  }catch(e){ console.warn('締切通知チェック失敗', e); }
+}
+
+// タスク変更時の通知（saveTask から呼ぶ）
+async function _notifyTaskChange(oldTask, newTask){
+  if(Notification.permission !== 'granted') return;
+  try{
+    const snap = await fbDb.ref('notificationSettings').once('value');
+    const s = snap.val() || {};
+    // 担当者変更
+    if(s.onAssigned && newTask.assigneeId && newTask.assigneeId !== oldTask?.assigneeId){
+      if(currentRole === 'member' && newTask.assigneeId === currentMemberId){
+        new Notification('📋 タスクが割り当てられました', { body: newTask.title, tag: `assigned_${newTask.id}` });
+      }
+    }
+    // ステータス変更
+    if(s.onStatusChange && oldTask && newTask.status !== oldTask.status){
+      if(currentRole === 'member' && newTask.assigneeId === currentMemberId){
+        new Notification(`🔄 ステータス変更: ${newTask.title}`, { body: `${oldTask.status} → ${newTask.status}`, tag: `status_${newTask.id}` });
+      }
+    }
+  }catch(e){}
 }
 
 /* ─────────────────────────────────────────────── */
@@ -1317,6 +1361,7 @@ async function _loginAsMember(){
   applyRole("member", matched.id);
   hideRoleGate();
   showToast(`${matched.name}さんとしてログインしました`);
+  checkDeadlineNotifications();
 }
 
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
@@ -1367,6 +1412,7 @@ async function chooseRole(role){
     saveRoleState("manager", null);
     applyRole("manager", null);
     hideRoleGate();
+    checkDeadlineNotifications();
   }else{
     document.getElementById("chooseMemberBtn").classList.add("selected");
     document.getElementById("chooseManagerBtn").classList.remove("selected");
@@ -1933,15 +1979,18 @@ function saveTask(){
     dependsOn
   };
   let rec;
+  let oldRec = null;
   if(isNew){
     rec = {id, ...data};
     state.tasks.push(rec);
   }else{
     rec = state.tasks.find(x=>x.id===id);
+    oldRec = {...rec};
     Object.assign(rec, data);
   }
   fsSet("tasks", rec.id, rec);
   gcalSyncTask(rec, isNew ? "create" : "update");
+  _notifyTaskChange(oldRec, rec);
   closeModal("taskModalOverlay");
   renderAll();
   showToast("タスクを保存しました");
