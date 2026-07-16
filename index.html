@@ -484,8 +484,10 @@
   .google-user-card .g-name{font-weight:600;font-size:14px;}
   .google-user-card .g-email{font-size:12px;color:var(--muted);}
   .signout-link{font-size:12px;color:var(--muted);text-decoration:underline;cursor:pointer;background:none;border:none;padding:0;margin-top:10px;}
-  .header-avatar{width:26px;height:26px;border-radius:50%;object-fit:cover;border:1.5px solid rgba(255,255,255,.5);vertical-align:middle;margin-right:4px;}
-  .header-avatar-placeholder{width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,.3);display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;vertical-align:middle;margin-right:4px;}
+  .header-avatar{width:26px;height:26px;border-radius:50%;object-fit:cover;border:1.5px solid rgba(255,255,255,.5);vertical-align:middle;margin-right:4px;cursor:pointer;transition:opacity .2s;}
+  .header-avatar:hover{opacity:.7;}
+  .header-avatar-placeholder{width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,.3);display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;vertical-align:middle;margin-right:4px;cursor:pointer;transition:opacity .2s;}
+  .header-avatar-placeholder:hover{opacity:.7;}
   .loading-overlay{position:fixed;inset:0;background:linear-gradient(135deg,var(--primary),var(--accent));display:flex;align-items:center;justify-content:center;z-index:400;flex-direction:column;gap:16px;}
   .loading-overlay.hidden{display:none;}
   .loading-spinner{width:42px;height:42px;border:4px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite;}
@@ -1121,17 +1123,20 @@ function showRoleGate(){
   document.getElementById("roleGate").classList.remove("hidden");
 }
 
+function _buildAvatarHtml(){
+  if(!currentGoogleUser) return "";
+  const tip = "タップしてアカウントを変更";
+  return currentGoogleUser.picture
+    ? `<img src="${escapeHtml(currentGoogleUser.picture)}" class="header-avatar" alt="" title="${tip}" onclick="signOutGoogle()">`
+    : `<span class="header-avatar-placeholder" title="${tip}" onclick="signOutGoogle()">${escapeHtml((currentGoogleUser.name||"?").charAt(0).toUpperCase())}</span>`;
+}
+
 function applyRole(role, memberId){
   currentRole = role;
   currentMemberId = memberId;
   document.body.dataset.role = role;
   const badge = document.getElementById("roleBadge");
-  let avatarHtml = "";
-  if(currentGoogleUser){
-    avatarHtml = currentGoogleUser.picture
-      ? `<img src="${escapeHtml(currentGoogleUser.picture)}" class="header-avatar" alt="">`
-      : `<span class="header-avatar-placeholder">${escapeHtml((currentGoogleUser.name||"?").charAt(0).toUpperCase())}</span>`;
-  }
+  const avatarHtml = _buildAvatarHtml();
   const storedName = currentUserName
     ? `${currentUserName.lastName} ${currentUserName.firstName}`
     : (currentGoogleUser ? currentGoogleUser.name : "");
@@ -1160,12 +1165,7 @@ function enterViewerMode(){
   const storedName = currentUserName
     ? `${currentUserName.lastName} ${currentUserName.firstName}`
     : (currentGoogleUser ? currentGoogleUser.name : "");
-  let avatarHtml = "";
-  if(currentGoogleUser){
-    avatarHtml = currentGoogleUser.picture
-      ? `<img src="${escapeHtml(currentGoogleUser.picture)}" class="header-avatar" alt="">`
-      : `<span class="header-avatar-placeholder">${escapeHtml((currentGoogleUser.name||"?").charAt(0).toUpperCase())}</span>`;
-  }
+  const avatarHtml = _buildAvatarHtml();
   document.getElementById("roleBadge").innerHTML =
     `${avatarHtml}${escapeHtml(storedName)}（閲覧モード） <button onclick="exitViewerMode()">メンバー画面に戻る</button>`;
   switchTab("dashboard");
