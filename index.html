@@ -1224,6 +1224,8 @@ function showRoleGate(){
       document.getElementById("nameStep").style.display = "none";
       document.getElementById("roleStep").style.display = "";
       _renderGoogleUserCard();
+      const isManagerUser = isAuthorizedManager(currentGoogleUser.email);
+      document.getElementById("chooseManagerBtn").style.display = isManagerUser ? "" : "none";
     }
   } else {
     document.getElementById("authStep").style.display = "";
