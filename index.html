@@ -180,6 +180,46 @@
   .gcal-frame{width:100%;height:700px;border:none;display:block;border-radius:var(--radius);}
   @media(max-width:640px){.gcal-frame{height:500px;}}
 
+  /* ---- Custom Task Calendar ---- */
+  .cal-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px 8px;font-weight:600;font-size:16px;}
+  .cal-header button{background:none;border:1px solid var(--border);border-radius:6px;padding:3px 14px;cursor:pointer;font-size:18px;color:var(--text);line-height:1.4;}
+  .cal-header button:hover{background:var(--bg);}
+  .cal-dow-row{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:11px;color:var(--muted);padding:0 10px 4px;}
+  .cal-days{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;padding:0 10px 12px;}
+  .cal-day{
+    min-height:54px;
+    display:flex;flex-direction:column;align-items:center;
+    gap:3px;padding:4px 2px;
+    border-radius:8px;cursor:pointer;font-size:12px;
+    border:1px solid transparent;
+  }
+  .cal-day:hover{background:var(--bg);}
+  .cal-day.empty{cursor:default;}
+  .cal-day.empty:hover{background:none;}
+  .cal-day.selected{border-color:var(--primary);background:#eff6ff;}
+  .cal-day-num{
+    width:24px;height:24px;border-radius:50%;display:flex;
+    align-items:center;justify-content:center;font-size:12px;flex-shrink:0;
+  }
+  .cal-day.today .cal-day-num{background:var(--primary);color:#fff;font-weight:700;}
+  .cal-task-dots{display:flex;flex-wrap:wrap;justify-content:center;gap:2px;width:100%;}
+  .cal-dot{
+    font-size:9px;line-height:14px;padding:0 4px;border-radius:99px;
+    background:var(--primary);color:#fff;white-space:nowrap;max-width:100%;
+    overflow:hidden;text-overflow:ellipsis;
+  }
+  .cal-dot.overdue{background:#dc2626;}
+  .cal-dot.done{background:#94a3b8;}
+  .cal-day-panel{border-top:1px solid var(--border);padding:12px 16px;}
+  .cal-day-panel-title{font-weight:600;font-size:13px;color:var(--muted);margin-bottom:8px;}
+  .cal-task-item{
+    display:flex;align-items:center;gap:8px;padding:8px 10px;
+    border:1px solid var(--border);border-radius:8px;margin-bottom:6px;
+    cursor:pointer;font-size:13px;
+  }
+  .cal-task-item:hover{background:var(--bg);}
+  .cal-task-item:last-child{margin-bottom:0;}
+
   .member-avatar{
     width:34px;height:34px;border-radius:50%;
     background:var(--primary);color:#fff;
@@ -646,6 +686,23 @@
 
   <!-- CALENDAR -->
   <section id="calendar" class="section manager-only">
+    <!-- タスク締切カレンダー -->
+    <div class="card" style="padding:0;margin-bottom:16px;">
+      <div class="cal-header">
+        <button onclick="calPrevMonth()">‹</button>
+        <span id="calMonthLabel"></span>
+        <button onclick="calNextMonth()">›</button>
+      </div>
+      <div class="cal-dow-row">
+        <div>日</div><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div>土</div>
+      </div>
+      <div class="cal-days" id="calGrid"></div>
+      <div id="calDayPanel" style="display:none;" class="cal-day-panel">
+        <div class="cal-day-panel-title" id="calDayPanelTitle"></div>
+        <div id="calDayTaskList"></div>
+      </div>
+    </div>
+    <!-- Google カレンダー -->
     <div class="card" style="padding:0;overflow:hidden;">
       <iframe
         class="gcal-frame"
@@ -1132,10 +1189,91 @@ function exitViewerMode(){
 
 
 /* ---------------- Nav ---------------- */
+/* ---------------- Task Calendar ---------------- */
+let calYear = new Date().getFullYear();
+let calMonth = new Date().getMonth();
+let calSelectedDate = null;
+
+function renderCalendar(){
+  const label = document.getElementById("calMonthLabel");
+  const grid = document.getElementById("calGrid");
+  if(!label || !grid) return;
+  label.textContent = `${calYear}年${calMonth + 1}月`;
+  const monthStr = `${calYear}-${String(calMonth + 1).padStart(2, "0")}`;
+  const tasksByDay = {};
+  state.tasks.forEach(t => {
+    if(t.deadline && t.deadline.startsWith(monthStr)){
+      const day = t.deadline.slice(8, 10);
+      if(!tasksByDay[day]) tasksByDay[day] = [];
+      tasksByDay[day].push(t);
+    }
+  });
+  const firstDow = new Date(calYear, calMonth, 1).getDay();
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const today = todayStr();
+  let html = "";
+  for(let i = 0; i < firstDow; i++) html += `<div class="cal-day empty"></div>`;
+  for(let d = 1; d <= daysInMonth; d++){
+    const ds = String(d).padStart(2, "0");
+    const dateStr = `${monthStr}-${ds}`;
+    const isToday = dateStr === today;
+    const isSelected = dateStr === calSelectedDate;
+    const tasks = tasksByDay[ds] || [];
+    const dots = tasks.slice(0, 3).map(t => {
+      const cls = t.status === "完了" ? "done" : isOverdue(t) ? "overdue" : "";
+      return `<span class="cal-dot ${cls}">${escapeHtml(t.title.length > 6 ? t.title.slice(0,6)+"…" : t.title)}</span>`;
+    }).join("");
+    const more = tasks.length > 3 ? `<span class="cal-dot" style="background:#94a3b8;">+${tasks.length-3}</span>` : "";
+    html += `<div class="cal-day${isToday?" today":""}${isSelected?" selected":""}" onclick="calSelectDay('${dateStr}')">
+      <span class="cal-day-num">${d}</span>
+      <div class="cal-task-dots">${dots}${more}</div>
+    </div>`;
+  }
+  grid.innerHTML = html;
+  if(calSelectedDate) _renderCalDayPanel(calSelectedDate);
+}
+
+function calSelectDay(dateStr){
+  calSelectedDate = calSelectedDate === dateStr ? null : dateStr;
+  renderCalendar();
+}
+
+function _renderCalDayPanel(dateStr){
+  const panel = document.getElementById("calDayPanel");
+  const title = document.getElementById("calDayPanelTitle");
+  const list = document.getElementById("calDayTaskList");
+  if(!panel) return;
+  const tasks = state.tasks.filter(t => t.deadline === dateStr);
+  if(!tasks.length){ panel.style.display = "none"; return; }
+  const d = new Date(dateStr + "T00:00:00");
+  const dow = ["日","月","火","水","木","金","土"][d.getDay()];
+  title.textContent = `${dateStr}（${dow}）の締切タスク`;
+  list.innerHTML = tasks.map(t => `
+    <div class="cal-task-item viewer-hide" onclick="openTaskModal('${t.id}')">
+      <span class="badge ${statusBadgeClass(t.status)}">${t.status}</span>
+      <span style="flex:1;">${escapeHtml(t.title)}</span>
+      <span style="color:var(--muted);font-size:12px;">${escapeHtml(memberName(t.assigneeId))}</span>
+    </div>
+  `).join("");
+  panel.style.display = "block";
+}
+
+function calPrevMonth(){
+  calMonth--; if(calMonth < 0){ calMonth = 11; calYear--; }
+  calSelectedDate = null;
+  renderCalendar();
+}
+function calNextMonth(){
+  calMonth++; if(calMonth > 11){ calMonth = 0; calYear++; }
+  calSelectedDate = null;
+  renderCalendar();
+}
+
 function switchTab(tab){
   document.querySelectorAll(".tab-btn").forEach(b=>b.classList.toggle("active", b.dataset.tab===tab));
   document.querySelectorAll(".section").forEach(s=>s.classList.toggle("active", s.id===tab));
   if(tab==="taskflow") renderTaskFlow();
+  if(tab==="calendar") renderCalendar();
 }
 
 function showToast(msg){
@@ -2246,6 +2384,7 @@ function renderAll(){
   renderMembers();
   renderAuthorizedManagers();
   if(document.getElementById("taskflow").classList.contains("active")) renderTaskFlow();
+  if(document.getElementById("calendar").classList.contains("active")) renderCalendar();
   if(currentRole === "member") renderMyTasks();
 }
 
