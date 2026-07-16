@@ -585,6 +585,7 @@
   <button class="tab-btn" data-tab="taskflow" onclick="switchTab('taskflow')">タスクフロー</button>
   <button class="tab-btn" data-tab="calendar" onclick="switchTab('calendar')">カレンダー</button>
   <button class="tab-btn" data-tab="members" onclick="switchTab('members')">メンバー</button>
+  <button class="tab-btn" data-tab="settings" onclick="switchTab('settings')">設定</button>
 </nav>
 
 <main>
@@ -665,6 +666,19 @@
       <button class="btn viewer-hide" onclick="openMemberModal()">＋ 新規メンバー</button>
     </div>
     <div id="memberList"></div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section id="settings" class="section manager-only">
+    <div class="card">
+      <h3 style="margin-top:0;">マネージャー認証アカウント</h3>
+      <p class="muted-text" style="margin-bottom:16px;">ここに登録されたメールアドレスのみ、ログイン時にマネージャーを選択できます。</p>
+      <div class="toolbar">
+        <div></div>
+        <button class="btn" onclick="openAddManagerModal()">＋ アカウントを追加</button>
+      </div>
+      <div id="authorizedManagerList"></div>
+    </div>
   </section>
 
   <!-- TASK FLOW (manager) -->
@@ -807,6 +821,18 @@
   </div>
 </div>
 
+<!-- ADD MANAGER MODAL -->
+<div class="modal-overlay" id="addManagerModalOverlay">
+  <div class="modal">
+    <h3>マネージャーアカウントを追加</h3>
+    <div class="form-row"><label>メールアドレス</label><input type="email" id="newManagerEmail" placeholder="example@gmail.com"></div>
+    <div class="modal-actions">
+      <button class="btn secondary" onclick="closeModal('addManagerModalOverlay')">キャンセル</button>
+      <button class="btn" onclick="saveAuthorizedManager()">追加</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -821,7 +847,27 @@ let currentMemberId = null;
 let myTaskFilter = "pending";
 
 const ROLE_KEY = "tpms_role_v1";
-const MANAGER_EMAIL = "haru84148@gmail.com";
+const MANAGER_EMAIL = "haru84148@gmail.com"; // bootstrap用初期管理者
+
+let authorizedManagers = []; // [{id, email}]
+
+function isAuthorizedManager(email){
+  return authorizedManagers.some(m => m.email.toLowerCase() === email.toLowerCase());
+}
+
+async function loadAuthorizedManagers(){
+  try{
+    const snap = await fbDb.ref("settings/authorizedManagers").once("value");
+    const val = snap.val();
+    authorizedManagers = val ? Object.entries(val).map(([id,d]) => ({id, email: d.email})) : [];
+    // 初回起動時のみ初期管理者を自動登録
+    if(authorizedManagers.length === 0){
+      const ref = fbDb.ref("settings/authorizedManagers").push();
+      await ref.set({email: MANAGER_EMAIL.toLowerCase()});
+      authorizedManagers = [{id: ref.key, email: MANAGER_EMAIL.toLowerCase()}];
+    }
+  }catch(e){ console.error("Failed to load authorized managers", e); }
+}
 
 const FIREBASE_CONFIG = {
   apiKey:            "AIzaSyDWwC3PuGH0L5dFgKzhI0Or00GbJcR-bSI",
@@ -904,7 +950,7 @@ async function submitUserName(){
   if(!lastName || !firstName){ alert("性と名の両方を入力してください"); return; }
   await _saveUserName(currentGoogleUser.uid, lastName, firstName);
   currentUserName = {lastName, firstName};
-  const isManagerUser = currentGoogleUser && currentGoogleUser.email.toLowerCase() === MANAGER_EMAIL.toLowerCase();
+  const isManagerUser = currentGoogleUser && isAuthorizedManager(currentGoogleUser.email);
   if(isManagerUser){ _showRoleStep(); } else { await _loginAsMember(); }
 }
 
@@ -981,6 +1027,7 @@ async function loadFromFirestore(){
   state.members = members;
   state.projects = projects;
   state.tasks    = tasks;
+  await loadAuthorizedManagers();
 }
 
 function exportData(){
@@ -1037,7 +1084,7 @@ function saveRoleState(role, memberId){
 
 async function chooseRole(role){
   if(role === "manager"){
-    if(!currentGoogleUser || currentGoogleUser.email.toLowerCase() !== MANAGER_EMAIL.toLowerCase()){
+    if(!currentGoogleUser || !isAuthorizedManager(currentGoogleUser.email)){
       alert("マネージャーモードへのアクセス権限がありません。");
       return;
     }
@@ -1096,7 +1143,7 @@ function applyRole(role, memberId){
     switchTab("dashboard");
   }else{
     const m = state.members.find(x=>x.id===memberId);
-    const isManagerEmail = currentGoogleUser && currentGoogleUser.email.toLowerCase() === MANAGER_EMAIL.toLowerCase();
+    const isManagerEmail = currentGoogleUser && isAuthorizedManager(currentGoogleUser.email);
     const viewerBtn = isManagerEmail ? "" : ` <button onclick="enterViewerMode()">管理画面を閲覧</button>`;
     badge.innerHTML = `${avatarHtml}${escapeHtml(m ? m.name : "メンバー")}さん <button onclick="switchRole()">切り替え</button>${viewerBtn}`;
     document.querySelectorAll(".section").forEach(s=>s.classList.remove("active"));
@@ -2190,11 +2237,69 @@ function escapeHtml(str){
     .replaceAll("'","&#039;");
 }
 
+/* ---------------- Render: Settings (authorized managers) ---------------- */
+function renderAuthorizedManagers(){
+  const el = document.getElementById("authorizedManagerList");
+  if(!el) return;
+  if(authorizedManagers.length === 0){
+    el.innerHTML = `<div class="empty">認証アカウントがありません</div>`;
+    return;
+  }
+  el.innerHTML = `<table>
+    <thead><tr><th>メールアドレス</th><th></th></tr></thead>
+    <tbody>
+    ${authorizedManagers.map(m => {
+      const isSelf = currentGoogleUser && m.email.toLowerCase() === currentGoogleUser.email.toLowerCase();
+      return `<tr>
+        <td>${escapeHtml(m.email)}</td>
+        <td style="text-align:right;">${isSelf
+          ? '<span class="muted-text" style="font-size:12px;">（自分）</span>'
+          : `<button class="btn small danger" onclick="deleteAuthorizedManager('${m.id}')">削除</button>`}
+        </td>
+      </tr>`;
+    }).join("")}
+    </tbody>
+  </table>`;
+}
+
+function openAddManagerModal(){
+  document.getElementById("newManagerEmail").value = "";
+  document.getElementById("addManagerModalOverlay").classList.add("active");
+}
+
+async function saveAuthorizedManager(){
+  const email = document.getElementById("newManagerEmail").value.trim().toLowerCase();
+  if(!email){ alert("メールアドレスを入力してください"); return; }
+  if(authorizedManagers.some(m => m.email.toLowerCase() === email)){
+    alert("すでに登録されています"); return;
+  }
+  const ref = fbDb.ref("settings/authorizedManagers").push();
+  await ref.set({email});
+  authorizedManagers.push({id: ref.key, email});
+  closeModal("addManagerModalOverlay");
+  renderAuthorizedManagers();
+  showToast("アカウントを追加しました");
+}
+
+async function deleteAuthorizedManager(id){
+  const m = authorizedManagers.find(x => x.id === id);
+  if(!m) return;
+  if(currentGoogleUser && m.email.toLowerCase() === currentGoogleUser.email.toLowerCase()){
+    alert("自分自身のアカウントは削除できません"); return;
+  }
+  if(!confirm(`${m.email} をマネージャー認証から削除しますか？`)) return;
+  await fbDb.ref(`settings/authorizedManagers/${id}`).remove();
+  authorizedManagers = authorizedManagers.filter(x => x.id !== id);
+  renderAuthorizedManagers();
+  showToast("アカウントを削除しました");
+}
+
 function renderAll(){
   renderDashboard();
   renderProjects();
   renderTasks();
   renderMembers();
+  renderAuthorizedManagers();
   if(document.getElementById("taskflow").classList.contains("active")) renderTaskFlow();
   if(currentRole === "member") renderMyTasks();
 }
@@ -2226,7 +2331,7 @@ window.addEventListener("DOMContentLoaded", ()=>{
       currentUserName = await _loadUserName(user.uid);
       renderAll();
 
-      const isManagerUser = currentGoogleUser.email.toLowerCase() === MANAGER_EMAIL.toLowerCase();
+      const isManagerUser = isAuthorizedManager(currentGoogleUser.email);
       if(!currentUserName){
         // 初回ログイン：姓名入力ステップを表示
         document.getElementById("roleGate").classList.remove("hidden");
