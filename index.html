@@ -246,6 +246,17 @@
     .cal-day-panel-title{font-size:14px;font-weight:700;margin-bottom:12px;}
   }
 
+  /* ---- Notification Settings ---- */
+  .notif-row{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:14px 0;border-bottom:1px solid var(--border);}
+  .notif-row:last-of-type{border-bottom:none;padding-bottom:0;}
+  .notif-row-label{font-weight:600;font-size:14px;margin-bottom:4px;}
+  .notif-row-desc{font-size:12px;color:var(--muted);margin:0;}
+  .notif-check{display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;padding:3px 0;}
+  .notif-check input{width:15px;height:15px;accent-color:var(--primary);cursor:pointer;}
+  .notif-timing-group{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:8px;}
+  .push-status-badge{display:inline-block;font-size:12px;padding:2px 10px;border-radius:99px;background:#f1f5f9;color:var(--muted);}
+  .push-status-badge.active{background:#dcfce7;color:#15803d;}
+
   .project-member-tags{display:flex;flex-wrap:wrap;gap:6px;min-height:28px;margin-bottom:8px;}
   .project-member-tags:empty::before{content:"（未選択）";color:var(--muted);font-size:13px;line-height:28px;}
   .member-tag{display:inline-flex;align-items:center;gap:5px;padding:3px 10px 3px 10px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:99px;font-size:13px;}
@@ -733,6 +744,48 @@
 
   <!-- SETTINGS -->
   <section id="settings" class="section manager-only">
+    <!-- 通知設定 -->
+    <div class="card" style="margin-bottom:16px;">
+      <h3 style="margin-top:0;">通知設定</h3>
+
+      <!-- ブラウザ Push -->
+      <div class="notif-row">
+        <div>
+          <div class="notif-row-label">ブラウザ通知</div>
+          <p class="notif-row-desc">PC・スマホのOSレベルで通知を受け取ります。バックグラウンドでも届きます。</p>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+          <span class="push-status-badge" id="pushStatusBadge">未設定</span>
+          <button class="btn secondary small" onclick="registerPushNotifications()">有効にする</button>
+        </div>
+      </div>
+
+      <!-- Discord Webhook -->
+      <div class="notif-row" style="flex-direction:column;">
+        <div class="notif-row-label">Discord 通知 Webhook URL</div>
+        <p class="notif-row-desc" style="margin-bottom:8px;">DiscordチャンネルのWebhook URLを入力すると、そのチャンネルに通知が届きます。</p>
+        <input type="url" id="discordWebhookUrl" placeholder="https://discord.com/api/webhooks/..." style="width:100%;box-sizing:border-box;">
+      </div>
+
+      <!-- タイミング -->
+      <div class="notif-row" style="flex-direction:column;">
+        <div class="notif-row-label">通知タイミング</div>
+        <label class="notif-check" style="margin-top:10px;"><input type="checkbox" id="notifyOnAssigned"> タスクが自分に割り当てられたとき</label>
+        <label class="notif-check"><input type="checkbox" id="notifyOnStatus"> タスクのステータスが変更されたとき</label>
+        <div style="margin-top:12px;">
+          <div style="font-size:13px;font-weight:600;margin-bottom:6px;">締切通知（毎朝8時）</div>
+          <div class="notif-timing-group">
+            <label class="notif-check"><input type="checkbox" id="notifyDay3"> 3日前</label>
+            <label class="notif-check"><input type="checkbox" id="notifyDay2"> 2日前</label>
+            <label class="notif-check"><input type="checkbox" id="notifyDay1"> 1日前</label>
+            <label class="notif-check"><input type="checkbox" id="notifyDay0"> 当日</label>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn" style="margin-top:4px;" onclick="saveNotificationSettings()">設定を保存</button>
+    </div>
+
     <div class="card">
       <h3 style="margin-top:0;">マネージャー認証アカウント</h3>
       <p class="muted-text" style="margin-bottom:16px;">ここに登録されたメールアドレスのみ、ログイン時にマネージャーを選択できます。</p>
@@ -795,6 +848,7 @@
     </div>
     <div id="myTaskList"></div>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
+      <button class="btn secondary small" onclick="registerPushNotifications()" style="opacity:.75;" id="memberPushBtn">🔔 通知を有効にする</button>
       <button class="btn secondary small" onclick="openMemberTaskModal()" style="opacity:.75;">＋ タスクを追加</button>
     </div>
   </section>
@@ -896,6 +950,8 @@ let myTaskFilter = "pending";
 
 const ROLE_KEY = "tpms_role_v1";
 const MANAGER_EMAIL = "haru84148@gmail.com"; // bootstrap用初期管理者
+// VAPID公開鍵（ボットで `npm run generate-keys` を実行して取得した値に置き換えてください）
+const VAPID_PUBLIC_KEY = "PASTE_YOUR_VAPID_PUBLIC_KEY_HERE";
 
 let authorizedManagers = []; // [{id, email}]
 
@@ -1071,6 +1127,100 @@ function _initGIS(){
     width: 280
   });
 }
+
+/* ──────────── Push / Notification ──────────── */
+
+function _urlBase64ToUint8Array(base64) {
+  const pad = '='.repeat((4 - base64.length % 4) % 4);
+  const b64 = (base64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(b64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+async function registerPushNotifications(){
+  if(!('serviceWorker' in navigator) || !('PushManager' in window)){
+    alert('このブラウザはプッシュ通知に対応していません。');
+    return;
+  }
+  if(VAPID_PUBLIC_KEY === 'PASTE_YOUR_VAPID_PUBLIC_KEY_HERE'){
+    alert('VAPID公開鍵が未設定です。ボットでキーを生成してindex.htmlに貼り付けてください。');
+    return;
+  }
+  const perm = await Notification.requestPermission();
+  if(perm !== 'granted'){
+    alert('通知が拒否されました。ブラウザの設定から「許可」に変更してください。');
+    return;
+  }
+  try{
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if(!sub){
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: _urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+      });
+    }
+    // Firebase に購読情報を保存（メンバーはmemberId、マネージャーは mgr_{uid}）
+    const key = currentRole === 'member' ? currentMemberId : `mgr_${currentGoogleUser.uid}`;
+    await fbDb.ref(`pushSubscriptions/${key}`).set({
+      subscription: sub.toJSON(),
+      type: currentRole,
+      memberId: currentRole === 'member' ? currentMemberId : null
+    });
+    _updatePushStatusBadge(true);
+    showToast('ブラウザ通知を有効にしました');
+  }catch(e){
+    console.error('Push登録失敗:', e);
+    alert('通知の登録に失敗しました: ' + e.message);
+  }
+}
+
+async function _updatePushStatusBadge(active){
+  const badge = document.getElementById('pushStatusBadge');
+  if(!badge) return;
+  if(active !== undefined){ badge.textContent = active ? '✅ 有効' : '未設定'; badge.className = 'push-status-badge' + (active ? ' active' : ''); return; }
+  if(!('serviceWorker' in navigator)) return;
+  const reg = await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.getSubscription();
+  badge.textContent = sub ? '✅ 有効' : '未設定';
+  badge.className = 'push-status-badge' + (sub ? ' active' : '');
+  // メンバーの通知ボタンも更新
+  const mBtn = document.getElementById('memberPushBtn');
+  if(mBtn) mBtn.textContent = sub ? '🔔 通知有効中' : '🔔 通知を有効にする';
+}
+
+async function loadNotificationSettings(){
+  _updatePushStatusBadge();
+  try{
+    const snap = await fbDb.ref('notificationSettings').once('value');
+    const s = snap.val() || {};
+    const days = s.deadlineDays || [];
+    [0,1,2,3].forEach(d => {
+      const el = document.getElementById(`notifyDay${d}`);
+      if(el) el.checked = days.includes(d);
+    });
+    const onA = document.getElementById('notifyOnAssigned');
+    const onS = document.getElementById('notifyOnStatus');
+    if(onA) onA.checked = !!s.onAssigned;
+    if(onS) onS.checked = !!s.onStatusChange;
+    const wu = document.getElementById('discordWebhookUrl');
+    if(wu) wu.value = s.discordWebhookUrl || '';
+  }catch(e){ console.warn('通知設定の読込失敗', e); }
+}
+
+async function saveNotificationSettings(){
+  const days = [0,1,2,3].filter(d => document.getElementById(`notifyDay${d}`)?.checked);
+  const settings = {
+    deadlineDays: days,
+    onAssigned: !!document.getElementById('notifyOnAssigned')?.checked,
+    onStatusChange: !!document.getElementById('notifyOnStatus')?.checked,
+    discordWebhookUrl: document.getElementById('discordWebhookUrl')?.value.trim() || ''
+  };
+  await fbDb.ref('notificationSettings').set(settings);
+  showToast('通知設定を保存しました');
+}
+
+/* ─────────────────────────────────────────────── */
 
 async function signOutGoogle(){
   try{
@@ -1402,6 +1552,7 @@ function switchTab(tab){
   document.querySelectorAll(".section").forEach(s=>s.classList.toggle("active", s.id===tab));
   if(tab==="taskflow") renderTaskFlow();
   if(tab==="calendar") renderCalendar();
+  if(tab==="settings") loadNotificationSettings();
 }
 
 function showToast(msg){
@@ -2545,6 +2696,9 @@ window.addEventListener("DOMContentLoaded", ()=>{
   if(flowScrollEl) flowScrollEl.addEventListener("wheel", handleFlowWheelZoom, { passive: false });
 
   // GIS 初期化（非同期ロードのためポーリングして準備完了を待つ）
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('/TPMS/sw.js').catch(e => console.warn('SW登録失敗:', e));
+  }
   _initGIS();
 
   // Firebase 初期化
