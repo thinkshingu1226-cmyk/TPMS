@@ -1005,10 +1005,19 @@ async function gcalSyncTask(rec, action){
   }catch(e){ console.warn("Calendar sync error:", e); }
 }
 
+function _isMobile(){
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+}
+
 async function signInWithGoogle(){
   try{
     const provider = new firebase.auth.GoogleAuthProvider();
-    await fbAuth.signInWithPopup(provider);
+    await fbAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+    if(_isMobile()){
+      await fbAuth.signInWithRedirect(provider);
+    } else {
+      await fbAuth.signInWithPopup(provider);
+    }
   }catch(e){
     if(e.code !== "auth/popup-closed-by-user") alert("サインインに失敗しました: " + e.message);
   }
@@ -2443,6 +2452,16 @@ window.addEventListener("DOMContentLoaded", ()=>{
   const app = firebase.initializeApp(FIREBASE_CONFIG);
   fbAuth = firebase.auth();
   fbDb   = firebase.database();
+
+  // localStorage永続化（リダイレクト後もモバイルSafariでセッションが維持される）
+  fbAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+
+  // モバイルSafariのリダイレクト認証結果を処理（エラーをコンソールに記録するのみ）
+  fbAuth.getRedirectResult().catch(e => {
+    if(e.code && e.code !== "auth/no-auth-event"){
+      console.warn("サインイン（リダイレクト）エラー:", e.code, e.message);
+    }
+  });
 
   // 認証状態を監視（ページリロード時も自動復元）
   fbAuth.onAuthStateChanged(async (user) => {
