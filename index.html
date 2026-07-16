@@ -766,7 +766,6 @@
     </div>
     <div id="myTaskList"></div>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
-      <button class="btn secondary small" onclick="openMemberProjectModal()" style="opacity:.75;">＋ プロジェクトを追加</button>
       <button class="btn secondary small" onclick="openMemberTaskModal()" style="opacity:.75;">＋ タスクを追加</button>
     </div>
   </section>
@@ -1802,20 +1801,15 @@ function renderMyTasks(){
           <div class="title">${escapeHtml(t.title)}</div>
           <div class="meta">${escapeHtml(projectName(t.projectId))} ・ 締切: ${t.deadline || "未設定"} ${overdue?'⚠️ 期限超過':''}</div>
         </div>
-        <button class="check-btn ${done?'checked':''}" onclick="toggleMyTaskDone('${t.id}')">${done?'✓':''}</button>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <button class="check-btn ${done?'checked':''}" onclick="toggleMyTaskDone('${t.id}')">${done?'✓':''}</button>
+          <button class="btn secondary small" style="padding:4px 8px;font-size:.75rem;" onclick="openTaskModal('${t.id}')">編集</button>
+        </div>
       </div>
     `;
   }).join("");
 }
 
-function openMemberProjectModal(){
-  if(currentRole !== "member" || !currentMemberId) return;
-  openProjectModal();
-  // 自分を参加メンバーとして自動選択
-  Array.from(document.getElementById("projectMembers").options).forEach(o=>{
-    o.selected = o.value === currentMemberId;
-  });
-}
 
 function openMemberTaskModal(){
   if(currentRole !== "member" || !currentMemberId) return;
