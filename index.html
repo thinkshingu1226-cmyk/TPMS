@@ -684,7 +684,7 @@
       <div class="flow-wrap" id="flowWrap">
         <div class="flow-toolbar-float" id="flowToolbarFloat">
           <select id="flowProjectSelect" onchange="renderTaskFlow()"></select>
-          <button class="btn secondary small" onclick="autoArrangeFlow()">🧭 自動整列</button>
+          <button class="btn secondary small viewer-hide" onclick="autoArrangeFlow()">🧭 自動整列</button>
           <button class="btn secondary small" onclick="toggleFlowFullscreen()" id="flowFullscreenBtn">⛶ 全画面表示</button>
           <div class="flow-zoom-controls">
             <button class="btn secondary small" onclick="flowZoomOut()" title="縮小">－</button>
@@ -1939,6 +1939,7 @@ function handleFlowEscKey(e){
 }
 
 function startNodeDrag(e, taskId){
+  if(currentRole === "viewer") return;
   if(e.button !== undefined && e.button !== 0) return;
   e.preventDefault();
   e.stopPropagation();
@@ -1966,6 +1967,7 @@ function startNodeDrag(e, taskId){
 }
 
 function startConnectionDrag(e, taskId){
+  if(currentRole === "viewer") return;
   e.preventDefault();
   e.stopPropagation();
   flowDrag = { type: "connection", taskId };
@@ -1976,6 +1978,7 @@ function startConnectionDrag(e, taskId){
 }
 
 function startNodeResize(e, taskId){
+  if(currentRole === "viewer") return;
   if(e.button !== undefined && e.button !== 0) return;
   e.preventDefault();
   e.stopPropagation();
@@ -2136,6 +2139,7 @@ function addFlowConnection(prereqId, dependentId){
 }
 
 function flowSvgClickHandler(e){
+  if(currentRole === "viewer") return;
   const hit = e.target.closest ? e.target.closest(".trace-hit") : null;
   if(!hit) return;
   const fromId = hit.dataset.from;
