@@ -208,8 +208,12 @@
     background:var(--primary);color:#fff;white-space:nowrap;max-width:100%;
     overflow:hidden;text-overflow:ellipsis;
   }
-  .cal-dot.overdue{background:#dc2626;}
-  .cal-dot.done{background:#94a3b8;}
+  .cal-dot.overdue{background:#dc2626;color:#fff;}
+  .cal-dot.done{background:#15803d;color:#fff;}
+  .cal-dot.progress{background:#1d4ed8;color:#fff;}
+  .cal-dot.plan{background:#4338ca;color:#fff;}
+  .cal-dot.hold{background:#b45309;color:#fff;}
+  .cal-dot.notstarted{background:#94a3b8;color:#fff;}
   .cal-day-panel{border-top:1px solid var(--border);padding:12px 16px;}
   .cal-day-panel-title{font-weight:600;font-size:13px;color:var(--muted);margin-bottom:8px;}
   .cal-task-item{
@@ -1286,7 +1290,7 @@ function renderCalendar(){
     const isSelected = dateStr === calSelectedDate;
     const tasks = tasksByDay[ds] || [];
     const dots = tasks.slice(0, 3).map(t => {
-      const cls = t.status === "完了" ? "done" : isOverdue(t) ? "overdue" : "";
+      const cls = isOverdue(t) ? "overdue" : statusBadgeClass(t.status);
       return `<span class="cal-dot ${cls}">${escapeHtml(t.title.length > 6 ? t.title.slice(0,6)+"…" : t.title)}</span>`;
     }).join("");
     const more = tasks.length > 3 ? `<span class="cal-dot" style="background:#94a3b8;">+${tasks.length-3}</span>` : "";
