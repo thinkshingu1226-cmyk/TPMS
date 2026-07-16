@@ -1154,7 +1154,8 @@ function applyRole(role, memberId){
     const m = state.members.find(x=>x.id===memberId);
     const isManagerEmail = currentGoogleUser && isAuthorizedManager(currentGoogleUser.email);
     const viewerBtn = isManagerEmail ? "" : ` <button onclick="enterViewerMode()">管理画面を閲覧</button>`;
-    badge.innerHTML = `${avatarHtml}${escapeHtml(m ? m.name : "メンバー")}さん${viewerBtn}`;
+    const switchBtn = isManagerEmail ? ` <button onclick="switchRole()">切り替え</button>` : "";
+    badge.innerHTML = `${avatarHtml}${escapeHtml(m ? m.name : "メンバー")}さん${viewerBtn}${switchBtn}`;
     document.querySelectorAll(".section").forEach(s=>s.classList.remove("active"));
     document.getElementById("myTasks").classList.add("active");
     renderMyTasks();
