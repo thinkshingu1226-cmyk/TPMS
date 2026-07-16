@@ -141,9 +141,6 @@
   .badge.done{background:#dcfce7;color:#15803d;}
   .badge.hold{background:#fef3c7;color:#b45309;}
   .badge.notstarted{background:#f1f5f9;color:#475569;}
-  .badge.high{background:#fee2e2;color:#b91c1c;}
-  .badge.mid{background:#fef3c7;color:#b45309;}
-  .badge.low{background:#e0f2fe;color:#0369a1;}
   .badge.overdue{background:#fee2e2;color:#b91c1c;}
 
   .progress-bar{background:#e2e8f0;border-radius:999px;height:8px;width:100%;overflow:hidden;}
@@ -783,13 +780,6 @@
       <div class="muted-text">Ctrl/Cmdキーで複数選択。このタスクの前に完了しているべきタスクを選びます。</div>
     </div>
     <div class="form-row"><label>締切</label><input type="date" id="taskDeadline"></div>
-    <div class="form-row"><label>優先度</label>
-      <select id="taskPriority">
-        <option value="高">高</option>
-        <option value="中" selected>中</option>
-        <option value="低">低</option>
-      </select>
-    </div>
     <div class="form-row"><label>ステータス</label>
       <select id="taskStatus">
         <option value="未着手">未着手</option>
@@ -1178,9 +1168,6 @@ function statusBadgeClass(status){
     default: return "plan";
   }
 }
-function priorityClass(p){
-  return p==="高"?"high":p==="低"?"low":"mid";
-}
 function isOverdue(task){
   if(!task.deadline || task.status==="完了") return false;
   return task.deadline < todayStr();
@@ -1377,7 +1364,7 @@ function renderTasks(){
   }
   el.innerHTML = `
     <table>
-      <thead><tr><th>タスク</th><th>プロジェクト</th><th>担当</th><th>締切</th><th>優先度</th><th>ステータス</th><th></th></tr></thead>
+      <thead><tr><th>タスク</th><th>プロジェクト</th><th>担当</th><th>締切</th><th>ステータス</th><th></th></tr></thead>
       <tbody>
       ${list.map(t=>`
         <tr onclick="openTaskModal('${t.id}')" style="cursor:pointer;">
@@ -1385,7 +1372,6 @@ function renderTasks(){
           <td>${escapeHtml(projectName(t.projectId))}</td>
           <td>${escapeHtml(memberName(t.assigneeId))}</td>
           <td>${isOverdue(t) ? `<span class="badge overdue">${t.deadline||'-'}</span>` : (t.deadline||'-')}</td>
-          <td><span class="badge ${priorityClass(t.priority)}">${t.priority}</span></td>
           <td><span class="badge ${statusBadgeClass(t.status)}">${t.status}</span></td>
           <td><button class="btn small secondary viewer-hide" onclick="event.stopPropagation();openTaskModal('${t.id}')">編集</button></td>
         </tr>
@@ -1410,7 +1396,6 @@ function openTaskModal(id){
     document.getElementById("taskProject").value = t.projectId;
     document.getElementById("taskAssignee").value = t.assigneeId||"";
     document.getElementById("taskDeadline").value = t.deadline||"";
-    document.getElementById("taskPriority").value = t.priority;
     document.getElementById("taskStatus").value = t.status;
     document.getElementById("taskNotes").value = t.notes||"";
     refreshTaskDependsOnOptions();
@@ -1452,7 +1437,6 @@ function saveTask(){
     projectId: document.getElementById("taskProject").value,
     assigneeId: document.getElementById("taskAssignee").value,
     deadline: document.getElementById("taskDeadline").value,
-    priority: document.getElementById("taskPriority").value,
     status: document.getElementById("taskStatus").value,
     notes: document.getElementById("taskNotes").value.trim(),
     dependsOn
@@ -1606,7 +1590,7 @@ function renderMyTasks(){
       <div class="my-task-item ${overdue?'overdue-item':''} ${done?'done-item':''}">
         <div>
           <div class="title">${escapeHtml(t.title)}</div>
-          <div class="meta">${escapeHtml(projectName(t.projectId))} ・ 締切: ${t.deadline || "未設定"} ${overdue?'⚠️ 期限超過':''} ・ 優先度: ${escapeHtml(t.priority)}</div>
+          <div class="meta">${escapeHtml(projectName(t.projectId))} ・ 締切: ${t.deadline || "未設定"} ${overdue?'⚠️ 期限超過':''}</div>
         </div>
         <button class="check-btn ${done?'checked':''}" onclick="toggleMyTaskDone('${t.id}')">${done?'✓':''}</button>
       </div>
