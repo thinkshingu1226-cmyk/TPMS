@@ -955,10 +955,89 @@ async function fsGetAll(col){
 }
 
 /* ---------------- Firebase Auth ---------------- */
+const GCAL_TOKEN_KEY = "tpms_gcal_token";
+const GCAL_TOKEN_EXP_KEY = "tpms_gcal_token_exp";
+let _gcalToken = null;
+
+function _storeGcalToken(token){
+  _gcalToken = token;
+  try{
+    sessionStorage.setItem(GCAL_TOKEN_KEY, token);
+    sessionStorage.setItem(GCAL_TOKEN_EXP_KEY, Date.now() + 55 * 60 * 1000); // 55分
+  }catch(e){}
+}
+
+function _getGcalToken(){
+  if(_gcalToken) return _gcalToken;
+  try{
+    const exp = parseInt(sessionStorage.getItem(GCAL_TOKEN_EXP_KEY) || "0");
+    if(Date.now() < exp){
+      _gcalToken = sessionStorage.getItem(GCAL_TOKEN_KEY);
+      return _gcalToken;
+    }
+    sessionStorage.removeItem(GCAL_TOKEN_KEY);
+    sessionStorage.removeItem(GCAL_TOKEN_EXP_KEY);
+  }catch(e){}
+  return null;
+}
+
+async function gcalSyncTask(rec, action){
+  const token = _getGcalToken();
+  if(!token) return;
+  const calId = "primary";
+  const base = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events`;
+  try{
+    if(action === "delete"){
+      if(!rec.gcalEventId) return;
+      await fetch(`${base}/${rec.gcalEventId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      return;
+    }
+    if(!rec.deadline) return;
+    const endDate = new Date(rec.deadline + "T00:00:00");
+    endDate.setDate(endDate.getDate() + 1);
+    const body = {
+      summary: rec.title,
+      description: [rec.notes, rec.assigneeId ? `担当: ${memberName(rec.assigneeId)}` : ""].filter(Boolean).join("\n"),
+      start: { date: rec.deadline },
+      end: { date: endDate.toISOString().slice(0, 10) }
+    };
+    let res;
+    if(action === "update" && rec.gcalEventId){
+      res = await fetch(`${base}/${rec.gcalEventId}`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+    } else {
+      res = await fetch(base, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+    }
+    if(res.ok){
+      const ev = await res.json();
+      if(ev.id && ev.id !== rec.gcalEventId){
+        rec.gcalEventId = ev.id;
+        fsSet("tasks", rec.id, rec);
+      }
+    } else if(res.status === 401){
+      _gcalToken = null;
+      try{ sessionStorage.removeItem(GCAL_TOKEN_KEY); }catch(e){}
+    }
+  }catch(e){ console.warn("Calendar sync error:", e); }
+}
+
 async function signInWithGoogle(){
   try{
     const provider = new firebase.auth.GoogleAuthProvider();
-    await fbAuth.signInWithPopup(provider);
+    provider.addScope("https://www.googleapis.com/auth/calendar.events");
+    const result = await fbAuth.signInWithPopup(provider);
+    const cred = firebase.auth.GoogleAuthProvider.credentialFromResult(result);
+    if(cred && cred.accessToken) _storeGcalToken(cred.accessToken);
   }catch(e){
     if(e.code !== "auth/popup-closed-by-user") alert("サインインに失敗しました: " + e.message);
   }
@@ -1639,6 +1718,7 @@ function saveTask(){
     Object.assign(rec, data);
   }
   fsSet("tasks", rec.id, rec);
+  gcalSyncTask(rec, isNew ? "create" : "update");
   closeModal("taskModalOverlay");
   renderAll();
   showToast("タスクを保存しました");
@@ -1648,6 +1728,8 @@ function deleteTask(){
   const id = document.getElementById("taskId").value;
   if(!id) return;
   if(!confirm("このタスクを削除しますか？")) return;
+  const rec = state.tasks.find(t=>t.id===id);
+  if(rec) gcalSyncTask(rec, "delete");
   state.tasks = state.tasks.filter(t=>t.id!==id);
   const affectedTasks = state.tasks.filter(t=>(t.dependsOn||[]).includes(id));
   affectedTasks.forEach(t=>{ t.dependsOn = t.dependsOn.filter(depId=>depId!==id); });
