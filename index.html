@@ -574,9 +574,6 @@
   </div>
   <div class="actions">
     <span class="role-badge" id="roleBadge"></span>
-    <button class="manager-only viewer-hide" onclick="exportData()">💾 データを保存</button>
-    <button class="manager-only viewer-hide" onclick="document.getElementById('fileInput').click()">📂 データを読み込む</button>
-    <input type="file" id="fileInput" accept="application/json" onchange="importData(event)">
   </div>
 </header>
 
@@ -1032,45 +1029,6 @@ async function loadFromFirestore(){
   await loadAuthorizedManagers();
 }
 
-function exportData(){
-  const blob = new Blob([JSON.stringify(state, null, 2)], {type: "application/json"});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  const stamp = todayStr();
-  a.href = url;
-  a.download = `TPMS_data_${stamp}.json`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  showToast("データをファイルに保存しました");
-}
-
-function importData(event){
-  const file = event.target.files[0];
-  if(!file) return;
-  const reader = new FileReader();
-  reader.onload = function(e){
-    try{
-      const parsed = JSON.parse(e.target.result);
-      if(!parsed.members || !parsed.projects || !parsed.tasks){
-        throw new Error("形式が不正です");
-      }
-      state = parsed;
-      renderAll();
-      Promise.all([
-        ...state.members.map(m => fsSet("members", m.id, m)),
-        ...state.projects.map(p => fsSet("projects", p.id, p)),
-        ...state.tasks.map(t => fsSet("tasks", t.id, t))
-      ]);
-      showToast("データを読み込みました（Firestoreへ同期中）");
-    }catch(err){
-      alert("読み込みに失敗しました: " + err.message);
-    }
-    event.target.value = "";
-  };
-  reader.readAsText(file);
-}
 
 /* ---------------- Roles ---------------- */
 function loadRoleState(){
