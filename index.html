@@ -536,23 +536,13 @@
   .loading-spinner{width:42px;height:42px;border:4px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite;}
   .loading-overlay p{color:#fff;font-size:14px;margin:0;}
   @keyframes spin{to{transform:rotate(360deg);}}
-  .google-signin-btn{
-    display:flex;align-items:center;gap:10px;
-    background:#fff;color:#3c4043;
-    border:1px solid #dadce0;border-radius:4px;
-    padding:10px 20px;font-size:14px;font-weight:500;
-    cursor:pointer;
-    box-shadow:0 1px 3px rgba(0,0,0,.08);
-    margin:0 auto;
-    transition:box-shadow .2s;
-  }
-  .google-signin-btn:hover{box-shadow:0 2px 8px rgba(0,0,0,.15);}
-  .google-signin-btn svg{flex-shrink:0;}
+  #gis-signin-btn{display:flex;justify-content:center;}
 </style>
 <!-- Firebase compat SDK -->
 <script src="https://www.gstatic.com/firebasejs/12.16.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.16.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.16.0/firebase-database-compat.js"></script>
+<script src="https://accounts.google.com/gsi/client" async></script>
 </head>
 <body>
 
@@ -570,10 +560,7 @@
     <div id="authStep" class="auth-step">
       <p>続行するにはGoogleアカウントでサインインしてください。</p>
       <div class="g-sign-btn-wrap">
-        <button class="google-signin-btn" onclick="signInWithGoogle()">
-          <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.859-3.048.859-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.964 10.706A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.706V4.962H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.038l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.962L3.964 6.294C4.672 4.169 6.656 3.58 9 3.58z"/></svg>
-          Googleでサインイン
-        </button>
+        <div id="gis-signin-btn"></div>
       </div>
     </div>
 
@@ -1006,11 +993,35 @@ async function gcalSyncTask(rec, action){
   }catch(e){ console.warn("Calendar sync error:", e); }
 }
 
-function signInWithGoogle(){
-  const provider = new firebase.auth.GoogleAuthProvider();
-  // awaitを使わず同期的に呼ぶことでiOS Safariのユーザー操作コンテキストを維持する
-  fbAuth.signInWithPopup(provider).catch(e => {
-    if(e.code !== "auth/popup-closed-by-user") alert("サインインに失敗しました: " + e.message);
+const GIS_CLIENT_ID = "407404219726-f59o78jqglu49qa46gc4efhkdumo8dnm.apps.googleusercontent.com";
+
+async function _handleGISCredential(response){
+  try{
+    const credential = firebase.auth.GoogleAuthProvider.credential(response.credential);
+    await fbAuth.signInWithCredential(credential);
+  }catch(e){
+    alert("サインインに失敗しました: " + e.message);
+  }
+}
+
+function _initGIS(){
+  if(typeof google === "undefined" || !google.accounts){
+    setTimeout(_initGIS, 100);
+    return;
+  }
+  google.accounts.id.initialize({
+    client_id: GIS_CLIENT_ID,
+    callback: _handleGISCredential,
+    auto_select: false,
+    cancel_on_tap_outside: true
+  });
+  const el = document.getElementById("gis-signin-btn");
+  if(el) google.accounts.id.renderButton(el, {
+    theme: "outline",
+    size: "large",
+    text: "signin_with",
+    shape: "rectangular",
+    width: 280
   });
 }
 
@@ -2448,12 +2459,14 @@ window.addEventListener("DOMContentLoaded", ()=>{
   const flowScrollEl = document.getElementById("flowScroll");
   if(flowScrollEl) flowScrollEl.addEventListener("wheel", handleFlowWheelZoom, { passive: false });
 
+  // GIS 初期化（非同期ロードのためポーリングして準備完了を待つ）
+  _initGIS();
+
   // Firebase 初期化
   const app = firebase.initializeApp(FIREBASE_CONFIG);
   fbAuth = firebase.auth();
   fbDb   = firebase.database();
 
-  // localStorage永続化（リダイレクト後もモバイルSafariでセッションが維持される）
   fbAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
 
   // 認証状態を監視（ページリロード時も自動復元）
