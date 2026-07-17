@@ -687,10 +687,6 @@
 
   <!-- MEMBERS -->
   <section id="members" class="section manager-only">
-    <div class="toolbar">
-      <div></div>
-      <button class="btn" onclick="openMemberModal()">＋ 新規メンバー</button>
-    </div>
     <div id="memberList"></div>
   </section>
 
@@ -837,20 +833,6 @@
 </div>
 
 <!-- MEMBER MODAL -->
-<div class="modal-overlay" id="memberModalOverlay">
-  <div class="modal">
-    <h3 id="memberModalTitle">新規メンバー</h3>
-    <input type="hidden" id="memberId">
-    <div class="form-row"><label>名前</label><input type="text" id="memberName"></div>
-    <div class="form-row"><label>役割</label><input type="text" id="memberRole" placeholder="例: 代表, 広報, 会計"></div>
-    <div class="form-row"><label>メールアドレス</label><input type="email" id="memberEmail"></div>
-    <div class="modal-actions">
-      <button class="btn danger" id="memberDeleteBtn" onclick="deleteMember()" style="display:none;">削除</button>
-      <button class="btn secondary" onclick="closeModal('memberModalOverlay')">キャンセル</button>
-      <button class="btn" onclick="saveMember()">保存</button>
-    </div>
-  </div>
-</div>
 
 <div class="toast" id="toast"></div>
 
@@ -950,6 +932,7 @@ async function submitUserName(){
   if(!lastName || !firstName){ alert("性と名の両方を入力してください"); return; }
   await _saveUserName(currentGoogleUser.uid, lastName, firstName);
   currentUserName = {lastName, firstName};
+  await _ensureMemberRecord(currentGoogleUser, currentUserName);
   _showRoleStep();
 }
 
@@ -1646,7 +1629,7 @@ function deleteTask(){
 function renderMembers(){
   const el = document.getElementById("memberList");
   if(state.members.length===0){
-    el.innerHTML = `<div class="empty">メンバーがいません。「＋ 新規メンバー」から追加してください。</div>`;
+    el.innerHTML = `<div class="empty">サインインしたアカウントが自動的にメンバーとして登録されます。</div>`;
     return;
   }
   el.innerHTML = `<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr));">` +
@@ -1655,12 +1638,12 @@ function renderMembers(){
       const projCount = state.projects.filter(p=>(p.memberIds||[]).includes(m.id)).length;
       const initial = m.name ? m.name.charAt(0) : "?";
       return `
-        <div class="card" style="cursor:pointer;" onclick="openMemberModal('${m.id}')">
+        <div class="card">
           <div class="flex-center" style="margin-bottom:8px;">
             <div class="member-avatar">${escapeHtml(initial)}</div>
             <div>
               <div style="font-weight:600;">${escapeHtml(m.name)}</div>
-              <div class="muted-text">${escapeHtml(m.role||"役割未設定")}</div>
+              <div class="muted-text">${escapeHtml(m.email||"")}</div>
             </div>
           </div>
           <div class="muted-text">📁 参加プロジェクト: ${projCount}件</div>
@@ -1670,67 +1653,22 @@ function renderMembers(){
     }).join("") + `</div>`;
 }
 
-function openMemberModal(id){
-  if(isReadOnly){ showToast("閲覧モードのため編集できません"); return; }
-  document.getElementById("memberId").value = id || "";
-  document.getElementById("memberDeleteBtn").style.display = id ? "inline-block" : "none";
-  if(id){
-    const m = state.members.find(x=>x.id===id);
-    document.getElementById("memberModalTitle").textContent = "メンバーを編集";
-    document.getElementById("memberName").value = m.name;
-    document.getElementById("memberRole").value = m.role||"";
-    document.getElementById("memberEmail").value = m.email||"";
-  }else{
-    document.getElementById("memberModalTitle").textContent = "新規メンバー";
-    document.getElementById("memberName").value = "";
-    document.getElementById("memberRole").value = "";
-    document.getElementById("memberEmail").value = "";
+async function _ensureMemberRecord(googleUser, userName){
+  if(!googleUser?.email || !userName) return null;
+  const name  = `${userName.lastName} ${userName.firstName}`;
+  const email = googleUser.email.toLowerCase();
+  let member  = state.members.find(m => m.email && m.email.toLowerCase() === email);
+  if(member){
+    if(member.name !== name){
+      member.name = name;
+      fsSet("members", member.id, member);
+    }
+    return member;
   }
-  document.getElementById("memberModalOverlay").classList.add("active");
-}
-
-function saveMember(){
-  const name = document.getElementById("memberName").value.trim();
-  if(!name){ alert("名前を入力してください"); return; }
-  const id = document.getElementById("memberId").value;
-  const data = {
-    name,
-    role: document.getElementById("memberRole").value.trim(),
-    email: document.getElementById("memberEmail").value.trim()
-  };
-  let rec;
-  if(id){
-    rec = state.members.find(x=>x.id===id);
-    Object.assign(rec, data);
-  }else{
-    rec = {id: uid(), ...data};
-    state.members.push(rec);
-  }
-  fsSet("members", rec.id, rec);
-  closeModal("memberModalOverlay");
-  renderAll();
-  showToast("メンバーを保存しました");
-}
-
-function deleteMember(){
-  const id = document.getElementById("memberId").value;
-  if(!id) return;
-  if(!confirm("このメンバーを削除しますか？")) return;
-  state.members = state.members.filter(m=>m.id!==id);
-  const affectedProjects = state.projects.filter(p=>(p.memberIds||[]).includes(id));
-  affectedProjects.forEach(p=>{ p.memberIds = (p.memberIds||[]).filter(mid=>mid!==id); });
-  const affectedTasksM = state.tasks.filter(t=>t.assigneeId===id);
-  affectedTasksM.forEach(t=>{ t.assigneeId=""; });
-  fsDel("members", id);
-  affectedProjects.forEach(p => fsSet("projects", p.id, p));
-  affectedTasksM.forEach(t => fsSet("tasks", t.id, t));
-  closeModal("memberModalOverlay");
-  if(currentRole==="member" && currentMemberId===id){
-    saveRoleState(null, null);
-    showRoleGate();
-  }
-  renderAll();
-  showToast("メンバーを削除しました");
+  member = { id: uid(), name, email: googleUser.email };
+  state.members.push(member);
+  fsSet("members", member.id, member);
+  return member;
 }
 
 
@@ -2455,6 +2393,7 @@ window.addEventListener("DOMContentLoaded", ()=>{
           isManagerAuthorized = !_all.exists();
         }
       }
+      if(currentUserName) await _ensureMemberRecord(currentGoogleUser, currentUserName);
       renderAll();
 
       if(!currentUserName){
