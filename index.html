@@ -1065,9 +1065,7 @@ function showRoleGate(){
     if(!currentUserName){
       _showNameStep();
     } else {
-      document.getElementById("nameStep").style.display = "none";
-      document.getElementById("roleStep").style.display = "";
-      _renderGoogleUserCard();
+      _showRoleStep();
     }
   } else {
     document.getElementById("authStep").style.display = "";
