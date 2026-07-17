@@ -753,6 +753,7 @@
     </div>
     <div class="form-row"><label>開始日</label><input type="date" id="projectStart"></div>
     <div class="form-row"><label>締切日</label><input type="date" id="projectEnd"></div>
+    <div class="form-row"><label>作成者</label><select id="projectCreator"><option value="">-</option></select></div>
     <div class="form-row"><label>参加メンバー</label><select id="projectMembers" multiple size="4"></select></div>
     <div class="modal-actions">
       <button class="btn danger" id="projectDeleteBtn" onclick="deleteProject()" style="display:none;">削除</button>
@@ -1147,7 +1148,7 @@ function renderDashboard(){
 function renderProjects(){
   const filter = document.getElementById("projectStatusFilter").value;
   let list = state.projects.filter(p=> !filter || p.status===filter);
-  if(currentRole === "member") list = list.filter(p => !p.createdBy || p.createdBy === currentMemberId);
+  if(currentRole === "member") list = list.filter(p => p.createdBy === currentMemberId);
   const el = document.getElementById("projectList");
   if(list.length===0){
     el.innerHTML = `<div class="empty">プロジェクトがありません。「＋ 新規プロジェクト」から追加してください。</div>`;
@@ -1165,6 +1166,7 @@ function renderProjects(){
           </div>
           <p class="muted-text" style="min-height:32px;">${escapeHtml(p.description||"")}</p>
           <div class="progress-bar" style="margin-bottom:8px;"><div style="width:${pct}%;"></div></div>
+          <div class="muted-text">👤 作成者: ${escapeHtml(p.createdBy ? memberName(p.createdBy) : "-")}</div>
           <div class="muted-text">📅 ${p.start||"-"} 〜 ${p.end||"-"}</div>
           <div class="muted-text">👥 ${escapeHtml(members)}</div>
         </div>
@@ -1176,9 +1178,14 @@ function refreshProjectSelects(){
   const memSel = document.getElementById("projectMembers");
   memSel.innerHTML = state.members.map(m=>`<option value="${m.id}">${escapeHtml(m.name)}</option>`).join("");
 
+  const creatorSel = document.getElementById("projectCreator");
+  const prevCreator = creatorSel.value;
+  creatorSel.innerHTML = `<option value="">-</option>` + state.members.map(m=>`<option value="${m.id}">${escapeHtml(m.name)}</option>`).join("");
+  creatorSel.value = prevCreator;
+
   const taskProjSel = document.getElementById("taskProject");
   const visibleProjects = currentRole === "member"
-    ? state.projects.filter(p => !p.createdBy || p.createdBy === currentMemberId)
+    ? state.projects.filter(p => p.createdBy === currentMemberId)
     : state.projects;
   taskProjSel.innerHTML = `<option value="">未分類</option>` + visibleProjects.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join("");
 
@@ -1201,6 +1208,7 @@ function openProjectModal(id){
   refreshProjectSelects();
   document.getElementById("projectId").value = id || "";
   document.getElementById("projectDeleteBtn").style.display = id ? "inline-block" : "none";
+  const creatorSel = document.getElementById("projectCreator");
   if(id){
     const p = state.projects.find(x=>x.id===id);
     document.getElementById("projectModalTitle").textContent = "プロジェクトを編集";
@@ -1209,6 +1217,7 @@ function openProjectModal(id){
     document.getElementById("projectStatus").value = p.status;
     document.getElementById("projectStart").value = p.start||"";
     document.getElementById("projectEnd").value = p.end||"";
+    creatorSel.value = p.createdBy||"";
     Array.from(document.getElementById("projectMembers").options).forEach(o=>{
       o.selected = (p.memberIds||[]).includes(o.value);
     });
@@ -1219,8 +1228,10 @@ function openProjectModal(id){
     document.getElementById("projectStatus").value = "計画中";
     document.getElementById("projectStart").value = "";
     document.getElementById("projectEnd").value = "";
+    creatorSel.value = currentRole === "member" ? currentMemberId : "";
     Array.from(document.getElementById("projectMembers").options).forEach(o=>o.selected=false);
   }
+  creatorSel.disabled = currentRole === "member";
   document.getElementById("projectModalOverlay").classList.add("active");
 }
 
@@ -1235,14 +1246,15 @@ function saveProject(){
     status: document.getElementById("projectStatus").value,
     start: document.getElementById("projectStart").value,
     end: document.getElementById("projectEnd").value,
-    memberIds
+    memberIds,
+    createdBy: document.getElementById("projectCreator").value || null
   };
   let rec;
   if(id){
     rec = state.projects.find(x=>x.id===id);
     Object.assign(rec, data);
   }else{
-    rec = {id: uid(), ...data, createdBy: currentRole === "member" ? currentMemberId : null};
+    rec = {id: uid(), ...data};
     state.projects.push(rec);
   }
   fsSet("projects", rec.id, rec);
@@ -1551,7 +1563,7 @@ function refreshFlowProjectSelect(){
   const sel = document.getElementById("flowProjectSelect");
   const prevVal = sel.value;
   let projects = state.projects;
-  if(currentRole === "member") projects = projects.filter(p => !p.createdBy || p.createdBy === currentMemberId);
+  if(currentRole === "member") projects = projects.filter(p => p.createdBy === currentMemberId);
   if(projects.length===0){
     sel.innerHTML = `<option value="">プロジェクトがありません</option>`;
     return;
