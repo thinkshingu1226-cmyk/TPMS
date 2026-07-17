@@ -1198,10 +1198,11 @@ function memberCalTasks(){
   if(!currentMemberId) return [];
   return state.tasks.filter(t=>t.assigneeId===currentMemberId);
 }
-function taskChipColor(status){
-  if(status==="完了")   return "#64748b";
-  if(status==="進行中") return "#2563eb";
-  return "#f59e0b";
+function taskChipColor(task){
+  if(task.status==="完了")   return "#16a34a";
+  if(isOverdue(task))        return "#dc2626";
+  if(task.status==="進行中") return "#2563eb";
+  return "#94a3b8";
 }
 function renderCalView(containerId, tasks){
   const el = document.getElementById(containerId);
@@ -1244,7 +1245,7 @@ function renderCalView(containerId, tasks){
     html+=`<div class="cal-cell${isToday?' today-cell':''}${dt.length?' has-tasks':''}">`;
     html+=`<span class="cal-date-num" style="${dColor}">${d}</span>`;
     dt.forEach(({t, isStart, isEnd})=>{
-      const color = taskChipColor(t.status);
+      const color = taskChipColor(t);
       const opacity = (!isStart && !isEnd) ? "opacity:.55;" : "";
       const marker = isEnd ? '<span style="font-size:9px;margin-left:2px;">●</span>' : "";
       html+=`<span class="cal-chip" style="background:${color};${opacity}" onclick="openTaskModal('${t.id}')" title="${escapeHtml(t.title)}">${escapeHtml(t.title)}${marker}</span>`;
