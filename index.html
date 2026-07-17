@@ -589,6 +589,12 @@
   <button class="tab-btn" data-tab="members" onclick="switchTab('members')">メンバー</button>
 </nav>
 
+<nav class="member-only">
+  <button class="tab-btn active" data-tab="myTasks" onclick="switchTab('myTasks')">自分のタスク</button>
+  <button class="tab-btn" data-tab="projects" onclick="switchTab('projects')">プロジェクト</button>
+  <button class="tab-btn" data-tab="taskflow" onclick="switchTab('taskflow')">タスクフロー</button>
+</nav>
+
 <main>
 
   <!-- DASHBOARD -->
@@ -613,7 +619,7 @@
   </section>
 
   <!-- PROJECTS -->
-  <section id="projects" class="section manager-only">
+  <section id="projects" class="section">
     <div class="toolbar">
       <div class="filters">
         <select id="projectStatusFilter" onchange="renderProjects()">
@@ -670,7 +676,7 @@
   </section>
 
   <!-- TASK FLOW (manager) -->
-  <section id="taskflow" class="section manager-only">
+  <section id="taskflow" class="section">
     <div class="card" style="padding:16px;">
       <div class="flow-legend">
         <span class="fl-item"><span class="fl-line"></span>先行タスク完了（通電中）</span>
@@ -1042,9 +1048,7 @@ function applyRole(role, memberId){
   }else{
     const m = state.members.find(x=>x.id===memberId);
     badge.innerHTML = `${avatarHtml}${escapeHtml(m ? m.name : "メンバー")}さん <button onclick="switchRole()">切り替え</button>`;
-    document.querySelectorAll(".section").forEach(s=>s.classList.remove("active"));
-    document.getElementById("myTasks").classList.add("active");
-    renderMyTasks();
+    switchTab("myTasks");
   }
 }
 
@@ -1055,6 +1059,7 @@ function switchTab(tab){
   document.querySelectorAll(".tab-btn").forEach(b=>b.classList.toggle("active", b.dataset.tab===tab));
   document.querySelectorAll(".section").forEach(s=>s.classList.toggle("active", s.id===tab));
   if(tab==="taskflow") renderTaskFlow();
+  if(tab==="myTasks") renderMyTasks();
 }
 
 function showToast(msg){
