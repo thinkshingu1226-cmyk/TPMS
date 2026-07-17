@@ -865,9 +865,6 @@ let currentRole = null;
 let currentMemberId = null;
 let isReadOnly = false;
 let isManagerAuthorized = false;
-let googleCalToken = null;
-let googleCalTokenExp = 0;
-try{ googleCalToken=sessionStorage.getItem("gct")||null; googleCalTokenExp=parseInt(sessionStorage.getItem("gcte")||"0"); }catch(_){}
 let myTaskFilter = "pending";
 
 const ROLE_KEY = "tpms_role_v1";
@@ -912,13 +909,7 @@ async function fsGetAll(col){
 async function signInWithGoogle(){
   try{
     const provider = new firebase.auth.GoogleAuthProvider();
-    provider.addScope("https://www.googleapis.com/auth/calendar.events");
-    const result = await fbAuth.signInWithPopup(provider);
-    if(result.credential?.accessToken){
-      googleCalToken = result.credential.accessToken;
-      googleCalTokenExp = Date.now() + 3500000;
-      try{ sessionStorage.setItem("gct", googleCalToken); sessionStorage.setItem("gcte", String(googleCalTokenExp)); }catch(_){}
-    }
+    await fbAuth.signInWithPopup(provider);
   }catch(e){
     if(e.code !== "auth/popup-closed-by-user") alert("サインインに失敗しました: " + e.message);
   }
@@ -1267,52 +1258,6 @@ function renderCalView(containerId, tasks){
   }
   html+=`</div></div>`;
   el.innerHTML=html;
-}
-
-/* ---------------- Google Calendar Sync ---------------- */
-function _gcalToken(){
-  if(googleCalToken && Date.now() < googleCalTokenExp - 60000) return googleCalToken;
-  const stored = sessionStorage.getItem("gct");
-  const exp    = parseInt(sessionStorage.getItem("gcte")||"0");
-  if(stored && Date.now() < exp - 60000){ googleCalToken=stored; googleCalTokenExp=exp; return stored; }
-  return null;
-}
-
-async function syncTaskToGcal(task){
-  const token = _gcalToken();
-  if(!token || !task.deadline) return;
-  const body = {
-    summary: task.title,
-    description: [task.notes, task.status ? "ステータス: "+task.status : ""].filter(Boolean).join("\n"),
-    start: { date: task.deadline },
-    end:   { date: addDays(task.deadline, 1) }
-  };
-  try{
-    if(task.gcalEventId){
-      await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${task.gcalEventId}`,{
-        method:"PUT", headers:{"Authorization":"Bearer "+token,"Content-Type":"application/json"}, body:JSON.stringify(body)
-      });
-    } else {
-      const res = await fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events",{
-        method:"POST", headers:{"Authorization":"Bearer "+token,"Content-Type":"application/json"}, body:JSON.stringify(body)
-      });
-      const data = await res.json();
-      if(data.id){
-        task.gcalEventId = data.id;
-        fsSet("tasks", task.id, task);
-      }
-    }
-  }catch(e){ console.warn("GCal sync error", e); }
-}
-
-async function deleteTaskFromGcal(task){
-  const token = _gcalToken();
-  if(!token || !task.gcalEventId) return;
-  try{
-    await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${task.gcalEventId}`,{
-      method:"DELETE", headers:{"Authorization":"Bearer "+token}
-    });
-  }catch(e){ console.warn("GCal delete error", e); }
 }
 
 /* ---------------- Manager Auth Management ---------------- */
@@ -1677,7 +1622,6 @@ function saveTask(){
     Object.assign(rec, data);
   }
   fsSet("tasks", rec.id, rec);
-  syncTaskToGcal(rec);
   closeModal("taskModalOverlay");
   renderAll();
   showToast("タスクを保存しました");
@@ -1687,8 +1631,6 @@ function deleteTask(){
   const id = document.getElementById("taskId").value;
   if(!id) return;
   if(!confirm("このタスクを削除しますか？")) return;
-  const delTask = state.tasks.find(t=>t.id===id);
-  if(delTask) deleteTaskFromGcal(delTask);
   state.tasks = state.tasks.filter(t=>t.id!==id);
   const affectedTasks = state.tasks.filter(t=>(t.dependsOn||[]).includes(id));
   affectedTasks.forEach(t=>{ t.dependsOn = t.dependsOn.filter(depId=>depId!==id); });
