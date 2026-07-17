@@ -1144,7 +1144,7 @@ function returnToSignIn(){
   if(!confirm("サインイン画面に戻りますか？")) return;
   isReadOnly = false;
   document.body.removeAttribute("data-readonly");
-  showRoleGate();
+  signOutGoogle();
 }
 
 function enterViewerMode(){
