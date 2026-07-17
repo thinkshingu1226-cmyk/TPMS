@@ -1149,6 +1149,7 @@ function returnToSignIn(){
 
 function enterViewerMode(){
   isReadOnly = true;
+  currentRole = "manager";
   document.body.dataset.role = "manager";
   document.body.dataset.readonly = "true";
   const badge = document.getElementById("roleBadge");
