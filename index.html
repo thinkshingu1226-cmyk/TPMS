@@ -911,18 +911,21 @@ function toggleNotifBell(){
 async function sendPushNotification(targetEmail, title, body){
   if(!targetEmail || !oneSignalApiKey) return;
   try{
-    await fetch("https://onesignal.com/api/v1/notifications", {
+    const res = await fetch("https://onesignal.com/api/v1/notifications", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Key ${oneSignalApiKey}` },
       body: JSON.stringify({
         app_id: ONESIGNAL_APP_ID,
         headings: { en: title, ja: title },
         contents: { en: body,  ja: body  },
-        include_aliases: { external_id: [_osExtId(targetEmail)] },
-        target_channel: "push"
+        include_external_user_ids: [_osExtId(targetEmail)],
+        channel_for_external_user_ids: "push"
       })
     });
-  }catch(e){ console.warn("Push notification failed", e); }
+    const data = await res.json();
+    console.log("[OneSignal]", data);
+    if(data.errors) console.warn("[OneSignal] errors:", data.errors);
+  }catch(e){ console.warn("[OneSignal] push failed:", e); }
 }
 
 const FIREBASE_CONFIG = {
