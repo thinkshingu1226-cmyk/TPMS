@@ -677,7 +677,7 @@
         <select id="taskAssigneeFilter" onchange="renderTasks()"><option value="">全担当者</option></select>
         <select id="taskStatusFilter" onchange="renderTasks()">
           <option value="">全ステータス</option>
-          <option value="未着手">未着手</option>
+          <option value="未完了">未完了</option>
           <option value="進行中">進行中</option>
           <option value="完了">完了</option>
         </select>
@@ -703,7 +703,7 @@
       <div class="flow-legend">
         <span class="fl-item"><span class="fl-line"></span>先行タスク完了（通電中）</span>
         <span class="fl-item"><span class="fl-line dashed"></span>先行タスク未完了（未通電）</span>
-        <span class="fl-item"><span class="fl-dot" style="background:#94a3b8;"></span>未着手</span>
+        <span class="fl-item"><span class="fl-dot" style="background:#94a3b8;"></span>未完了</span>
         <span class="fl-item"><span class="fl-dot" style="background:#2563eb;"></span>進行中</span>
         <span class="fl-item"><span class="fl-dot" style="background:#16a34a;"></span>完了</span>
         <span class="fl-item"><span class="fl-dot" style="background:#dc2626;"></span>期限超過</span>
@@ -823,7 +823,7 @@
       <div class="muted-text">Ctrl/Cmdキーで複数選択。このタスクの前に完了しているべきタスクを選びます。</div>
     </div>
     <div class="form-row"><label>締切</label><input type="date" id="taskDeadline"></div>
-    <input type="hidden" id="taskStatus" value="未着手">
+    <input type="hidden" id="taskStatus" value="未完了">
     <div class="form-row"><label>メモ</label><textarea id="taskNotes" rows="2"></textarea></div>
     <div class="modal-actions">
       <button class="btn danger" id="taskDeleteBtn" onclick="deleteTask()" style="display:none;">削除</button>
@@ -1409,7 +1409,7 @@ function statusBadgeClass(status){
     case "進行中": return "progress";
     case "完了": return "done";
     case "保留": return "hold";
-    case "未着手": return "notstarted";
+    case "未完了": return "notstarted";
     default: return "plan";
   }
 }
@@ -1668,7 +1668,7 @@ function openTaskModal(id){
     document.getElementById("taskProject").value = "";
     document.getElementById("taskAssignee").value = "";
     document.getElementById("taskDeadline").value = "";
-    document.getElementById("taskStatus").value = "未着手";
+    document.getElementById("taskStatus").value = "未完了";
     document.getElementById("taskNotes").value = "";
     refreshTaskDependsOnOptions();
     refreshAssigneeByProject();
@@ -1849,7 +1849,7 @@ function openMemberTaskModal(){
 function toggleMyTaskDone(taskId){
   const t = state.tasks.find(x=>x.id===taskId);
   if(!t) return;
-  t.status = (t.status === "完了") ? "未着手" : "完了";
+  t.status = (t.status === "完了") ? "未完了" : "完了";
   fsSet("tasks", t.id, t);
   renderMyTasks();
   renderDashboard();
