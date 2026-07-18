@@ -888,7 +888,7 @@ function osLogin(email){
     try{
       await OneSignal.login(extId);
       console.log("[OneSignal] login ok:", extId);
-    }catch(e){ console.warn("[OneSignal] login failed:", e); }
+    }catch(e){ console.error("[OneSignal] login failed:", e.name, e.message); }
   });
 }
 
@@ -906,13 +906,14 @@ async function toggleNotifBell(){
       const perm = await Notification.requestPermission();
       if(perm !== "granted"){ showToast("通知が許可されませんでした"); return; }
       OneSignalDeferred.push(async function(OneSignal){
-        try{
-          await OneSignal.User.PushSubscription.optIn();
-          if(currentGoogleUser?.email){
+        try{ await OneSignal.User.PushSubscription.optIn(); }
+        catch(e){ console.warn("[OneSignal] optIn failed:", e.name, e.message); }
+        if(currentGoogleUser?.email){
+          try{
             await OneSignal.login(_osExtId(currentGoogleUser.email));
             console.log("[OneSignal] login ok:", _osExtId(currentGoogleUser.email));
-          }
-        }catch(e){ console.warn("[OneSignal] optIn/login failed:", e); }
+          }catch(e){ console.error("[OneSignal] login failed:", e.name, e.message); }
+        }
       });
       notifPermission = true;
       localStorage.setItem("tpms_notif", "1");
