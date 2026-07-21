@@ -719,6 +719,7 @@
         <div class="flow-toolbar-float" id="flowToolbarFloat">
           <div class="flow-toolbar-handle" id="flowToolbarHandle" title="ドラッグして移動">⠿</div>
           <select id="flowProjectSelect" onchange="renderTaskFlow()"></select>
+          <button class="btn small" onclick="openTaskModalFromFlow()">＋ 新規タスク</button>
           <button class="btn secondary small" onclick="autoArrangeFlow()">🧭 自動整列</button>
           <button class="btn secondary small" onclick="toggleFlowFullscreen()" id="flowFullscreenBtn">⛶ 全画面表示</button>
           <div class="flow-zoom-controls">
@@ -1929,6 +1930,16 @@ function setTaskStatus(taskId, status){
 }
 
 /* ---------------- Render: Task Flow (manager) ---------------- */
+function openTaskModalFromFlow(){
+  const projectId = document.getElementById("flowProjectSelect").value;
+  openTaskModal();
+  if(projectId){
+    document.getElementById("taskProject").value = projectId;
+    refreshTaskDependsOnOptions();
+    refreshAssigneeByProject();
+  }
+}
+
 function refreshFlowProjectSelect(){
   const sel = document.getElementById("flowProjectSelect");
   const prevVal = sel.value;
