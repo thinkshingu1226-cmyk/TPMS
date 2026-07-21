@@ -942,8 +942,8 @@ async function sendPushNotification(targetEmail, title, body){
         app_id: ONESIGNAL_APP_ID,
         headings: { en: title, ja: title },
         contents: { en: body,  ja: body  },
-        url: "https://thinkshingu1226-cmyk.github.io/TPMS/",
-        web_url: "https://thinkshingu1226-cmyk.github.io/TPMS/",
+        url: "https://think-shingu.github.io/TPMS/",
+        web_url: "https://think-shingu.github.io/TPMS/",
         include_external_user_ids: [_osExtId(targetEmail)],
         channel_for_external_user_ids: "push"
       })
