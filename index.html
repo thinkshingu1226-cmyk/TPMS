@@ -1442,12 +1442,12 @@ function projectProgress(projectId){
 /* ---------------- Render: Dashboard ---------------- */
 function renderDashboard(){
   document.getElementById("statProjects").textContent = state.projects.filter(p=>p.status==="進行中").length;
-  document.getElementById("statTasks").textContent = state.tasks.filter(t=>t.status!=="完了").length;
+  document.getElementById("statTasks").textContent = state.tasks.filter(t=>t.status!=="完了" && t.status!=="取りやめ").length;
   document.getElementById("statOverdue").textContent = state.tasks.filter(isOverdue).length;
   document.getElementById("statMembers").textContent = state.members.length;
 
   const upcoming = state.tasks
-    .filter(t=>t.status!=="完了" && t.deadline)
+    .filter(t=>t.status!=="完了" && t.status!=="取りやめ" && t.deadline)
     .sort((a,b)=>a.deadline.localeCompare(b.deadline))
     .slice(0,6);
   const upEl = document.getElementById("upcomingDeadlines");
@@ -1800,7 +1800,7 @@ function renderMembers(){
   }
   el.innerHTML = `<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr));">` +
     state.members.map(m=>{
-      const taskCount = state.tasks.filter(t=>t.assigneeId===m.id && t.status!=="完了").length;
+      const taskCount = state.tasks.filter(t=>t.assigneeId===m.id && t.status!=="完了" && t.status!=="取りやめ").length;
       const projCount = state.projects.filter(p=>(p.memberIds||[]).includes(m.id)).length;
       const initial = m.name ? m.name.charAt(0) : "?";
       return `
@@ -1851,7 +1851,7 @@ function renderMyTasks(){
   document.getElementById("myTaskGreeting").textContent = m ? `${m.name}さんのタスク` : "タスク";
 
   let list = state.tasks.filter(t=>t.assigneeId===currentMemberId);
-  if(myTaskFilter==="pending") list = list.filter(t=>t.status!=="完了");
+  if(myTaskFilter==="pending") list = list.filter(t=>t.status!=="完了" && t.status!=="取りやめ");
   if(myTaskFilter==="done") list = list.filter(t=>t.status==="完了");
   list = list.sort((a,b)=>(a.deadline||"9999").localeCompare(b.deadline||"9999"));
 
