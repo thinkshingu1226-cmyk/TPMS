@@ -142,6 +142,7 @@
   .badge.done{background:#dcfce7;color:#15803d;}
   .badge.hold{background:#fef3c7;color:#b45309;}
   .badge.notstarted{background:#f1f5f9;color:#475569;}
+  .badge.cancelled{background:#f1f5f9;color:#94a3b8;text-decoration:line-through;}
   .badge.high{background:#fee2e2;color:#b91c1c;}
   .badge.mid{background:#fef3c7;color:#b45309;}
   .badge.low{background:#e0f2fe;color:#0369a1;}
@@ -680,8 +681,8 @@
         <select id="taskStatusFilter" onchange="renderTasks()">
           <option value="">全ステータス</option>
           <option value="未完了">未完了</option>
-          <option value="進行中">進行中</option>
           <option value="完了">完了</option>
+          <option value="取りやめ">取りやめ</option>
         </select>
       </div>
       <button class="btn" onclick="openTaskModal()">＋ 新規タスク</button>
@@ -1422,11 +1423,12 @@ function statusBadgeClass(status){
     case "完了": return "done";
     case "保留": return "hold";
     case "未完了": return "notstarted";
+    case "取りやめ": return "cancelled";
     default: return "plan";
   }
 }
 function isOverdue(task){
-  if(!task.deadline || task.status==="完了") return false;
+  if(!task.deadline || task.status==="完了" || task.status==="取りやめ") return false;
   return task.deadline < todayStr();
 }
 function projectProgress(projectId){
@@ -1646,7 +1648,11 @@ function renderTasks(){
           <td>${isOverdue(t) ? `<span class="badge overdue">${t.deadline||'-'}</span>` : (t.deadline||'-')}</td>
           <td><span class="badge ${statusBadgeClass(t.status)}">${t.status}</span></td>
           <td style="white-space:nowrap;">
-            <button class="btn small ${t.status==='完了' ? '' : 'primary'}" onclick="event.stopPropagation();toggleMyTaskDone('${t.id}')" title="${t.status==='完了' ? '未完了に戻す' : '完了にする'}">${t.status==='完了' ? '↩' : '✓'}</button>
+            ${t.status==='取りやめ'
+              ? `<button class="btn small secondary" onclick="event.stopPropagation();setTaskStatus('${t.id}','未完了')" title="未完了に戻す">↩</button>`
+              : `<button class="btn small ${t.status==='完了' ? '' : 'primary'}" onclick="event.stopPropagation();toggleMyTaskDone('${t.id}')" title="${t.status==='完了' ? '未完了に戻す' : '完了にする'}">${t.status==='完了' ? '↩' : '✓'}</button>
+            <button class="btn small secondary" onclick="event.stopPropagation();setTaskStatus('${t.id}','取りやめ')" title="取りやめにする">✕</button>`
+            }
             <button class="btn small secondary" onclick="event.stopPropagation();openTaskModal('${t.id}')">編集</button>
           </td>
         </tr>
@@ -1891,6 +1897,15 @@ function toggleMyTaskDone(taskId){
   const t = state.tasks.find(x=>x.id===taskId);
   if(!t) return;
   t.status = (t.status === "完了") ? "未完了" : "完了";
+  fsSet("tasks", t.id, t);
+  renderMyTasks();
+  renderDashboard();
+  renderTasks();
+}
+function setTaskStatus(taskId, status){
+  const t = state.tasks.find(x=>x.id===taskId);
+  if(!t) return;
+  t.status = status;
   fsSet("tasks", t.id, t);
   renderMyTasks();
   renderDashboard();
