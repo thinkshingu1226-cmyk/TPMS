@@ -837,6 +837,7 @@
     <input type="hidden" id="taskStatus" value="未完了">
     <div class="modal-actions">
       <button class="btn danger" id="taskDeleteBtn" onclick="deleteTask()" style="display:none;">削除</button>
+      <button class="btn secondary" id="taskCancelBtn" onclick="taskToggleCancel()" style="display:none;">取りやめ</button>
       <button class="btn secondary" onclick="closeModal('taskModalOverlay')">キャンセル</button>
       <button class="btn" onclick="saveTask()">保存</button>
     </div>
@@ -1650,10 +1651,15 @@ function renderTasks(){
           <td style="white-space:nowrap;">
             ${t.status==='取りやめ'
               ? `<button class="btn small secondary" onclick="event.stopPropagation();setTaskStatus('${t.id}','未完了')" title="未完了に戻す">↩</button>`
-              : `<button class="btn small ${t.status==='完了' ? '' : 'primary'}" onclick="event.stopPropagation();toggleMyTaskDone('${t.id}')" title="${t.status==='完了' ? '未完了に戻す' : '完了にする'}">${t.status==='完了' ? '↩' : '✓'}</button>
-            <button class="btn small secondary" onclick="event.stopPropagation();setTaskStatus('${t.id}','取りやめ')" title="取りやめにする">✕</button>`
+              : `<button class="btn small ${t.status==='完了' ? '' : 'primary'}" onclick="event.stopPropagation();toggleMyTaskDone('${t.id}')" title="${t.status==='完了' ? '未完了に戻す' : '完了にする'}">${t.status==='完了' ? '↩' : '✓'}</button>`
             }
-            <button class="btn small secondary" onclick="event.stopPropagation();openTaskModal('${t.id}')">編集</button>
+            <div style="display:inline-flex;flex-direction:column;gap:2px;vertical-align:middle;">
+              <button class="btn small secondary" onclick="event.stopPropagation();openTaskModal('${t.id}')">編集</button>
+              ${t.status!=='取りやめ'
+                ? `<button class="btn small secondary" onclick="event.stopPropagation();setTaskStatus('${t.id}','取りやめ')" style="font-size:11px;">取りやめ</button>`
+                : ''
+              }
+            </div>
           </td>
         </tr>
       `).join("")}
@@ -1670,6 +1676,7 @@ function openTaskModal(id){
   document.getElementById("taskAssigneeLockNote").style.display = "none";
   document.getElementById("taskId").value = id || "";
   document.getElementById("taskDeleteBtn").style.display = id ? "inline-block" : "none";
+  document.getElementById("taskCancelBtn").style.display = "none";
   if(id){
     const t = state.tasks.find(x=>x.id===id);
     document.getElementById("taskModalTitle").textContent = "タスクを編集";
@@ -1678,6 +1685,9 @@ function openTaskModal(id){
     document.getElementById("taskAssignee").value = t.assigneeId||"";
     document.getElementById("taskDeadline").value = t.deadline||"";
     document.getElementById("taskStatus").value = t.status;
+    const cancelBtn = document.getElementById("taskCancelBtn");
+    cancelBtn.style.display = "inline-block";
+    cancelBtn.textContent = t.status === "取りやめ" ? "未完了に戻す" : "取りやめ";
     refreshTaskDependsOnOptions();
     const depSel = document.getElementById("taskDependsOn");
     Array.from(depSel.options).forEach(o=>{ o.selected = (t.dependsOn||[]).includes(o.value); });
@@ -1901,6 +1911,18 @@ function toggleMyTaskDone(taskId){
   renderMyTasks();
   renderDashboard();
   renderTasks();
+}
+function taskToggleCancel(){
+  const id = document.getElementById("taskId").value;
+  if(!id) return;
+  const t = state.tasks.find(x=>x.id===id);
+  if(!t) return;
+  t.status = t.status === "取りやめ" ? "未完了" : "取りやめ";
+  fsSet("tasks", t.id, t);
+  renderMyTasks();
+  renderDashboard();
+  renderTasks();
+  closeModal("taskModalOverlay");
 }
 function setTaskStatus(taskId, status){
   const t = state.tasks.find(x=>x.id===taskId);
