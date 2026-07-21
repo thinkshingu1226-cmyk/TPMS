@@ -627,8 +627,8 @@
   <button class="tab-btn active" data-tab="myTasks" onclick="switchTab('myTasks')">自分のタスク</button>
   <button class="tab-btn" data-tab="projects" onclick="switchTab('projects')">自分のプロジェクト</button>
   <button class="tab-btn" data-tab="taskflow" onclick="switchTab('taskflow')">タスクフロー</button>
-  <button class="tab-btn" data-tab="memberCalendar" onclick="switchTab('memberCalendar')">カレンダー</button>
   <button class="tab-btn" data-tab="memo" onclick="switchTab('memo')">メモ</button>
+  <button class="tab-btn" data-tab="memberCalendar" onclick="switchTab('memberCalendar')">カレンダー</button>
 </nav>
 
 <main>
@@ -820,7 +820,7 @@
   <div class="modal">
     <h3 id="taskModalTitle">新規タスク</h3>
     <input type="hidden" id="taskId">
-    <div class="form-row"><label>タスク名</label><input type="text" id="taskTitle"></div>
+    <div class="form-row"><label>タスク名</label><input type="text" id="taskTitle" autocomplete="off"></div>
     <div class="form-row"><label>プロジェクト</label><select id="taskProject" onchange="refreshTaskDependsOnOptions();refreshAssigneeByProject()"></select></div>
     <div class="form-row" id="taskAssigneeRow">
       <label>担当者</label>
@@ -869,7 +869,7 @@ let notifPermission = localStorage.getItem("tpms_notif") === "1";
 window.OneSignalDeferred = window.OneSignalDeferred || [];
 OneSignalDeferred.push(async function(OneSignal){
   try{
-    await OneSignal.init({ appId: ONESIGNAL_APP_ID, notifyButton: { enable: false }, allowLocalhostAsSecureOrigin: true });
+    await OneSignal.init({ appId: ONESIGNAL_APP_ID, notifyButton: { enable: false }, allowLocalhostAsSecureOrigin: true, notificationClickHandlerMatch: "exact", notificationClickHandlerAction: "navigate" });
     console.log("[OneSignal] init ok, optedIn:", OneSignal.User.PushSubscription.optedIn);
   }catch(e){
     console.error("[OneSignal] init failed:", e);
@@ -909,14 +909,14 @@ async function toggleNotifBell(){
       const perm = await Notification.requestPermission();
       if(perm !== "granted"){ showToast("通知が許可されませんでした"); return; }
       OneSignalDeferred.push(async function(OneSignal){
-        try{ await OneSignal.User.PushSubscription.optIn(); }
-        catch(e){ console.warn("[OneSignal] optIn failed:", e.name, e.message); }
         if(currentGoogleUser?.email){
           try{
             await OneSignal.login(_osExtId(currentGoogleUser.email));
             console.log("[OneSignal] login ok:", _osExtId(currentGoogleUser.email));
           }catch(e){ console.error("[OneSignal] login failed:", e.name, e.message); }
         }
+        try{ await OneSignal.User.PushSubscription.optIn(); }
+        catch(e){ console.warn("[OneSignal] optIn failed:", e.name, e.message); }
       });
       notifPermission = true;
       localStorage.setItem("tpms_notif", "1");
@@ -940,6 +940,8 @@ async function sendPushNotification(targetEmail, title, body){
         app_id: ONESIGNAL_APP_ID,
         headings: { en: title, ja: title },
         contents: { en: body,  ja: body  },
+        url: "https://thinkshingu1226-cmyk.github.io/TPMS/",
+        web_url: "https://thinkshingu1226-cmyk.github.io/TPMS/",
         include_external_user_ids: [_osExtId(targetEmail)],
         channel_for_external_user_ids: "push"
       })
@@ -1643,7 +1645,10 @@ function renderTasks(){
           <td>${escapeHtml(memberName(t.assigneeId))}</td>
           <td>${isOverdue(t) ? `<span class="badge overdue">${t.deadline||'-'}</span>` : (t.deadline||'-')}</td>
           <td><span class="badge ${statusBadgeClass(t.status)}">${t.status}</span></td>
-          <td><button class="btn small secondary" onclick="event.stopPropagation();openTaskModal('${t.id}')">編集</button></td>
+          <td style="white-space:nowrap;">
+            <button class="btn small ${t.status==='完了' ? '' : 'primary'}" onclick="event.stopPropagation();toggleMyTaskDone('${t.id}')" title="${t.status==='完了' ? '未完了に戻す' : '完了にする'}">${t.status==='完了' ? '↩' : '✓'}</button>
+            <button class="btn small secondary" onclick="event.stopPropagation();openTaskModal('${t.id}')">編集</button>
+          </td>
         </tr>
       `).join("")}
       </tbody>
