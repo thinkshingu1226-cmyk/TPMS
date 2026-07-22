@@ -1406,6 +1406,19 @@ async function removeManagerEmail(key){
   renderManagerAuth();
 }
 
+function showAssigneePopover(taskId, event){
+  event.stopPropagation();
+  const t = state.tasks.find(x=>x.id===taskId);
+  if(!t) return;
+  const pop = document.getElementById("statusPopover");
+  pop.innerHTML = getAssigneeIds(t).map(mid=>
+    `<div class="status-popover-row"><span>${escapeHtml(memberName(mid))}</span></div>`
+  ).join("");
+  const r = event.target.getBoundingClientRect();
+  pop.style.display = "block";
+  pop.style.top = (r.bottom + window.scrollY + 4) + "px";
+  pop.style.left = Math.min(r.left + window.scrollX, window.innerWidth - 180) + "px";
+}
 function showStatusPopover(taskId, event){
   event.stopPropagation();
   const t = state.tasks.find(x=>x.id===taskId);
@@ -1729,7 +1742,9 @@ function renderTasks(){
       ${list.map(t=>{
         const ds = derivedTaskStatus(t);
         const ids = getAssigneeIds(t);
-        const assigneeDisplay = ids.length > 1 ? `計${ids.length}名` : (ids.length===1 ? escapeHtml(memberName(ids[0])) : "-");
+        const assigneeDisplay = ids.length > 1
+          ? `<span style="cursor:pointer;text-decoration:underline dotted;" onclick="event.stopPropagation();showAssigneePopover('${t.id}',event)">計${ids.length}名</span>`
+          : (ids.length===1 ? escapeHtml(memberName(ids[0])) : "-");
         const ct = completionText(t);
         let statusCell;
         if(ds==="取りやめ"){
