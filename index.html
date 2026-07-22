@@ -1735,7 +1735,7 @@ function renderTasks(){
         if(ds==="取りやめ"){
           statusCell = `<span class="badge ${statusBadgeClass("取りやめ")}">取りやめ</span>`;
         }else if(ct){
-          statusCell = `<span class="badge ${statusBadgeClass(ds)}">${escapeHtml(ds)}</span> <span class="muted-text" style="font-size:11px;">${escapeHtml(ct)}</span>`;
+          statusCell = `<span class="badge ${statusBadgeClass(ds==="完了" ? "完了" : "未完了")}">${ct}</span>`;
         }else{
           statusCell = `<span class="badge ${statusBadgeClass(ds)}">${escapeHtml(ds)}</span>`;
         }
