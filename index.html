@@ -1447,28 +1447,21 @@ function showStatusPopover(taskId, event){
     pop.style.display="none";
     return;
   }
-  const renderPop = ()=>{
-    const task = state.tasks.find(x=>x.id===taskId);
-    pop.innerHTML = getAssigneeIds(task).map(mid=>{
-      const ms = getMemberStatus(task, mid);
-      const bc = ms==="完了" ? "done" : "notstarted";
-      return `<div class="status-popover-row" style="cursor:pointer;" onclick="event.stopPropagation();toggleMemberStatus('${taskId}','${mid}');this.closest('#statusPopover') && renderStatusPopoverContent('${taskId}')">
-        <span>${escapeHtml(memberName(mid))}</span><span class="badge ${bc}">${ms}</span>
-      </div>`;
-    }).join("");
-  };
-  renderPop();
   window.renderStatusPopoverContent = (tid)=>{
     const task = state.tasks.find(x=>x.id===tid);
     if(!task) return;
     pop.innerHTML = getAssigneeIds(task).map(mid=>{
       const ms = getMemberStatus(task, mid);
       const bc = ms==="完了" ? "done" : "notstarted";
-      return `<div class="status-popover-row" style="cursor:pointer;" onclick="event.stopPropagation();toggleMemberStatus('${tid}','${mid}');renderStatusPopoverContent('${tid}')">
+      const interactive = !isReadOnly
+        ? `style="cursor:pointer;" onclick="event.stopPropagation();toggleMemberStatus('${tid}','${mid}');renderStatusPopoverContent('${tid}')"`
+        : `style="cursor:default;"`;
+      return `<div class="status-popover-row" ${interactive}>
         <span>${escapeHtml(memberName(mid))}</span><span class="badge ${bc}">${ms}</span>
       </div>`;
     }).join("");
   };
+  renderStatusPopoverContent(taskId);
   _positionPopover(pop, event.target.getBoundingClientRect());
 }
 document.addEventListener("click", ()=>{ const p=document.getElementById("statusPopover"); if(p) p.style.display="none"; });
@@ -2042,6 +2035,7 @@ function openMemberTaskModal(){
 }
 
 function toggleMemberStatus(taskId, memberId){
+  if(isReadOnly){ showToast("閲覧モードのため変更できません"); return; }
   const t = state.tasks.find(x=>x.id===taskId);
   if(!t || t.status==="取りやめ") return;
   if(!t.memberStatuses) t.memberStatuses={};
