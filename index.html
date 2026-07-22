@@ -827,8 +827,12 @@
     <div class="form-row"><label>プロジェクト</label><select id="taskProject" onchange="refreshTaskDependsOnOptions();refreshAssigneeByProject()"></select></div>
     <div class="form-row" id="taskAssigneeRow">
       <label>担当者</label>
-      <select id="taskAssignee"><option value="">未割当</option></select>
+      <div id="taskAssigneeList" style="max-height:140px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:6px;display:flex;flex-wrap:wrap;gap:6px;"></div>
       <div class="muted-text" id="taskAssigneeLockNote" style="display:none;margin-top:4px;">あなたのタスクとして追加されます</div>
+    </div>
+    <div class="form-row" id="memberStatusesRow" style="display:none;">
+      <label>担当者の進捗</label>
+      <div id="memberStatusesList" style="display:flex;flex-direction:column;gap:4px;"></div>
     </div>
     <div class="form-row">
       <label>先行タスク（依存関係）</label>
@@ -1296,10 +1300,11 @@ function renderCalendars(){
 }
 function memberCalTasks(){
   if(!currentMemberId) return [];
-  return state.tasks.filter(t=>t.assigneeId===currentMemberId);
+  return state.tasks.filter(t=>getAssigneeIds(t).includes(currentMemberId));
 }
 function taskChipColor(task){
-  if(task.status==="完了")   return "#16a34a";
+  const ds = derivedTaskStatus(task);
+  if(ds==="完了")            return "#16a34a";
   if(isOverdue(task))        return "#dc2626";
   if(task.status==="進行中") return "#2563eb";
   return "#94a3b8";
@@ -1414,6 +1419,27 @@ function memberName(id){
   const m = state.members.find(x=>x.id===id);
   return m ? m.name : "未割当";
 }
+function getAssigneeIds(task){
+  if(task.assigneeIds && task.assigneeIds.length) return task.assigneeIds;
+  if(task.assigneeId) return [task.assigneeId];
+  return [];
+}
+function getMemberStatus(task, memberId){
+  return (task.memberStatuses && task.memberStatuses[memberId]) || "未完了";
+}
+function derivedTaskStatus(task){
+  if(task.status==="取りやめ") return "取りやめ";
+  const ids = getAssigneeIds(task);
+  if(!ids.length) return task.status||"未完了";
+  const done = ids.filter(id=>(task.memberStatuses||{})[id]==="完了").length;
+  return done===ids.length ? "完了" : "未完了";
+}
+function completionText(task){
+  const ids = getAssigneeIds(task);
+  if(ids.length<=1) return null;
+  const done = ids.filter(id=>(task.memberStatuses||{})[id]==="完了").length;
+  return `${done}/${ids.length} 完了`;
+}
 function projectName(id){
   if(!id) return "未分類";
   const p = state.projects.find(x=>x.id===id);
@@ -1431,40 +1457,44 @@ function statusBadgeClass(status){
   }
 }
 function isOverdue(task){
-  if(!task.deadline || task.status==="完了" || task.status==="取りやめ") return false;
+  const s = derivedTaskStatus(task);
+  if(!task.deadline || s==="完了" || s==="取りやめ") return false;
   return task.deadline < todayStr();
 }
 function projectProgress(projectId){
   const ts = state.tasks.filter(t=>t.projectId===projectId);
   if(ts.length===0) return 0;
-  const done = ts.filter(t=>t.status==="完了").length;
+  const done = ts.filter(t=>derivedTaskStatus(t)==="完了").length;
   return Math.round((done/ts.length)*100);
 }
 
 /* ---------------- Render: Dashboard ---------------- */
 function renderDashboard(){
   document.getElementById("statProjects").textContent = state.projects.filter(p=>p.status==="進行中").length;
-  document.getElementById("statTasks").textContent = state.tasks.filter(t=>t.status!=="完了" && t.status!=="取りやめ").length;
+  document.getElementById("statTasks").textContent = state.tasks.filter(t=>derivedTaskStatus(t)!=="完了" && t.status!=="取りやめ").length;
   document.getElementById("statOverdue").textContent = state.tasks.filter(isOverdue).length;
   document.getElementById("statMembers").textContent = state.members.length;
 
   const upcoming = state.tasks
-    .filter(t=>t.status!=="完了" && t.status!=="取りやめ" && t.deadline)
+    .filter(t=>derivedTaskStatus(t)!=="完了" && t.status!=="取りやめ" && t.deadline)
     .sort((a,b)=>a.deadline.localeCompare(b.deadline))
     .slice(0,6);
   const upEl = document.getElementById("upcomingDeadlines");
   if(upcoming.length===0){
     upEl.innerHTML = `<div class="empty">締切のあるタスクはありません</div>`;
   }else{
-    upEl.innerHTML = upcoming.map(t=>`
+    upEl.innerHTML = upcoming.map(t=>{
+      const assigneeNames = getAssigneeIds(t).map(id=>memberName(id)).join("・") || "未割当";
+      const ds = derivedTaskStatus(t);
+      return `
       <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">
         <div>
           <div style="font-weight:600;font-size:13px;">${escapeHtml(t.title)}</div>
-          <div class="muted-text">${escapeHtml(projectName(t.projectId))} ・ ${escapeHtml(memberName(t.assigneeId))}</div>
+          <div class="muted-text">${escapeHtml(projectName(t.projectId))} ・ ${escapeHtml(assigneeNames)}</div>
         </div>
-        <span class="badge ${isOverdue(t)?'overdue':statusBadgeClass(t.status)}">${isOverdue(t)?'期限超過':t.deadline}</span>
+        <span class="badge ${isOverdue(t)?'overdue':statusBadgeClass(ds)}">${isOverdue(t)?'期限超過':t.deadline}</span>
       </div>
-    `).join("");
+    `}).join("");
   }
 
   const progEl = document.getElementById("projectProgressList");
@@ -1537,8 +1567,14 @@ function refreshProjectSelects(){
   filterProjSel.value = currentVal;
 }
 function refreshMemberSelects(){
-  const taskAssSel = document.getElementById("taskAssignee");
-  taskAssSel.innerHTML = `<option value="">未割当</option>` + state.members.map(m=>`<option value="${m.id}">${escapeHtml(m.name)}</option>`).join("");
+  const taskAssListEl = document.getElementById("taskAssigneeList");
+  if(taskAssListEl){
+    taskAssListEl.innerHTML = state.members.map(m=>
+      `<label style="display:flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap;">
+        <input type="checkbox" class="assignee-check" value="${m.id}"> ${escapeHtml(m.name)}
+      </label>`
+    ).join("");
+  }
 
   const filterAssSel = document.getElementById("taskAssigneeFilter");
   const currentVal = filterAssSel.value;
@@ -1627,11 +1663,14 @@ function renderTasks(){
   const pf = document.getElementById("taskProjectFilter").value;
   const af = document.getElementById("taskAssigneeFilter").value;
   const sf = document.getElementById("taskStatusFilter").value;
-  let list = state.tasks.filter(t=>
-    (!pf || (pf === "__none__" ? !t.projectId : t.projectId===pf)) &&
-    (!af || t.assigneeId===af) &&
-    (!sf || t.status===sf)
-  );
+  let list = state.tasks.filter(t=>{
+    const ds = derivedTaskStatus(t);
+    return (
+      (!pf || (pf === "__none__" ? !t.projectId : t.projectId===pf)) &&
+      (!af || getAssigneeIds(t).includes(af)) &&
+      (!sf || ds===sf)
+    );
+  });
   list = list.sort((a,b)=> (a.deadline||"9999").localeCompare(b.deadline||"9999"));
 
   const el = document.getElementById("taskList");
@@ -1643,21 +1682,34 @@ function renderTasks(){
     <table>
       <thead><tr><th>タスク</th><th>プロジェクト</th><th>担当</th><th>締切</th><th>ステータス</th><th></th></tr></thead>
       <tbody>
-      ${list.map(t=>`
+      ${list.map(t=>{
+        const ds = derivedTaskStatus(t);
+        const ids = getAssigneeIds(t);
+        const assigneeDisplay = ids.length > 1 ? `${ids.length}人` : (ids.length===1 ? escapeHtml(memberName(ids[0])) : "-");
+        const ct = completionText(t);
+        let statusCell;
+        if(ds==="取りやめ"){
+          statusCell = `<span class="badge ${statusBadgeClass("取りやめ")}">取りやめ</span>`;
+        }else if(ct){
+          statusCell = `<span class="badge ${statusBadgeClass(ds)}">${escapeHtml(ds)}</span> <span class="muted-text" style="font-size:11px;">${escapeHtml(ct)}</span>`;
+        }else{
+          statusCell = `<span class="badge ${statusBadgeClass(ds)}">${escapeHtml(ds)}</span>`;
+        }
+        return `
         <tr onclick="openTaskModal('${t.id}')" style="cursor:pointer;">
           <td>${escapeHtml(t.title)}</td>
           <td>${escapeHtml(projectName(t.projectId))}</td>
-          <td>${escapeHtml(memberName(t.assigneeId))}</td>
+          <td>${assigneeDisplay}</td>
           <td>${isOverdue(t) ? `<span class="badge overdue">${t.deadline||'-'}</span>` : (t.deadline||'-')}</td>
-          <td><span class="badge ${statusBadgeClass(t.status)}">${t.status}</span></td>
+          <td>${statusCell}</td>
           <td style="white-space:nowrap;">
-            ${t.status==='取りやめ'
+            ${ds==='取りやめ'
               ? `<button class="btn small secondary" onclick="event.stopPropagation();setTaskStatus('${t.id}','未完了')" title="未完了に戻す">↩</button>`
-              : `<button class="btn small ${t.status==='完了' ? '' : 'primary'}" onclick="event.stopPropagation();toggleMyTaskDone('${t.id}')" title="${t.status==='完了' ? '未完了に戻す' : '完了にする'}">${t.status==='完了' ? '↩' : '✓'}</button>`
+              : `<button class="btn small ${ds==='完了' ? '' : 'primary'}" onclick="event.stopPropagation();toggleMyTaskDone('${t.id}')" title="${ds==='完了' ? '未完了に戻す' : '完了にする'}">${ds==='完了' ? '↩' : '✓'}</button>`
             }
           </td>
         </tr>
-      `).join("")}
+      `}).join("")}
       </tbody>
     </table>
   `;
@@ -1667,17 +1719,17 @@ function openTaskModal(id){
   if(isReadOnly){ showToast("閲覧モードのため編集できません"); return; }
   refreshProjectSelects();
   refreshMemberSelects();
-  document.getElementById("taskAssignee").disabled = false;
   document.getElementById("taskAssigneeLockNote").style.display = "none";
   document.getElementById("taskId").value = id || "";
   document.getElementById("taskDeleteBtn").style.display = id ? "inline-block" : "none";
   document.getElementById("taskCancelBtn").style.display = "none";
+  const memberStatusesRow = document.getElementById("memberStatusesRow");
+  const memberStatusesList = document.getElementById("memberStatusesList");
   if(id){
     const t = state.tasks.find(x=>x.id===id);
     document.getElementById("taskModalTitle").textContent = "タスクを編集";
     document.getElementById("taskTitle").value = t.title;
     document.getElementById("taskProject").value = t.projectId;
-    document.getElementById("taskAssignee").value = t.assigneeId||"";
     document.getElementById("taskDeadline").value = t.deadline||"";
     document.getElementById("taskStatus").value = t.status;
     const cancelBtn = document.getElementById("taskCancelBtn");
@@ -1686,14 +1738,37 @@ function openTaskModal(id){
     refreshTaskDependsOnOptions();
     const depSel = document.getElementById("taskDependsOn");
     Array.from(depSel.options).forEach(o=>{ o.selected = (t.dependsOn||[]).includes(o.value); });
+    // Set checked state for assignee checkboxes
+    const assigneeIds = getAssigneeIds(t);
+    document.querySelectorAll("#taskAssigneeList .assignee-check").forEach(cb=>{
+      cb.checked = assigneeIds.includes(cb.value);
+    });
+    // Populate memberStatuses progress section
+    if(assigneeIds.length > 0){
+      memberStatusesRow.style.display = "";
+      memberStatusesList.innerHTML = assigneeIds.map(mid=>{
+        const ms = getMemberStatus(t, mid);
+        const badgeClass = ms === "完了" ? "done" : "notstarted";
+        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;">
+          <span style="font-size:13px;">${escapeHtml(memberName(mid))}</span>
+          <span class="badge ${badgeClass}">${escapeHtml(ms)}</span>
+        </div>`;
+      }).join("");
+    } else {
+      memberStatusesRow.style.display = "none";
+      memberStatusesList.innerHTML = "";
+    }
     refreshAssigneeByProject();
   }else{
     document.getElementById("taskModalTitle").textContent = "新規タスク";
     document.getElementById("taskTitle").value = "";
     document.getElementById("taskProject").value = "";
-    document.getElementById("taskAssignee").value = "";
     document.getElementById("taskDeadline").value = "";
     document.getElementById("taskStatus").value = "未完了";
+    // Uncheck all checkboxes
+    document.querySelectorAll("#taskAssigneeList .assignee-check").forEach(cb=>{ cb.checked=false; });
+    memberStatusesRow.style.display = "none";
+    memberStatusesList.innerHTML = "";
     refreshTaskDependsOnOptions();
     refreshAssigneeByProject();
   }
@@ -1706,7 +1781,8 @@ function saveTask(){
   let id = document.getElementById("taskId").value;
   const isNew = !id;
   if(isNew) id = uid();
-  const prevAssigneeId = isNew ? null : (state.tasks.find(x => x.id === id)?.assigneeId || null);
+  const existingTask = isNew ? null : state.tasks.find(x => x.id === id);
+  const prevAssigneeIds = isNew ? [] : getAssigneeIds(existingTask || {});
   const dependsOn = Array.from(document.getElementById("taskDependsOn").selectedOptions).map(o=>o.value).filter(Boolean);
 
   if(wouldCreateCycle(id, dependsOn)){
@@ -1714,14 +1790,31 @@ function saveTask(){
     return;
   }
 
+  const assigneeIds = Array.from(document.querySelectorAll("#taskAssigneeList .assignee-check:checked")).map(cb=>cb.value);
+
+  // Build memberStatuses
+  let memberStatuses = {};
+  if(isNew){
+    assigneeIds.forEach(mid=>{ memberStatuses[mid] = "未完了"; });
+  }else{
+    const prevStatuses = existingTask?.memberStatuses || {};
+    // Preserve existing statuses, initialize new assignees as "未完了", remove removed assignees
+    assigneeIds.forEach(mid=>{
+      memberStatuses[mid] = prevStatuses[mid] || "未完了";
+    });
+  }
+
   const data = {
     title,
     projectId: document.getElementById("taskProject").value,
-    assigneeId: document.getElementById("taskAssignee").value,
+    assigneeIds,
+    assigneeId: assigneeIds[0]||"",
+    memberStatuses,
     deadline: document.getElementById("taskDeadline").value,
     status: document.getElementById("taskStatus").value,
     dependsOn
   };
+
   let rec;
   if(isNew){
     rec = {id, ...data};
@@ -1730,20 +1823,26 @@ function saveTask(){
     rec = state.tasks.find(x=>x.id===id);
     Object.assign(rec, data);
   }
+  // Derive and store final status (preserving 取りやめ from taskStatus hidden field)
+  rec.status = derivedTaskStatus(rec);
+  // If status was set to 取りやめ from modal, keep it
+  if(document.getElementById("taskStatus").value === "取りやめ") rec.status = "取りやめ";
+
   fsSet("tasks", rec.id, rec);
 
-  const newAssigneeId = data.assigneeId;
-  if(newAssigneeId && newAssigneeId !== prevAssigneeId){
-    const assignee = state.members.find(m => m.id === newAssigneeId);
+  // Send push notifications to newly assigned members
+  const newAssigneeIds = assigneeIds.filter(mid => !prevAssigneeIds.includes(mid));
+  const projName = state.projects.find(p => p.id === data.projectId)?.name || "";
+  newAssigneeIds.forEach(mid=>{
+    const assignee = state.members.find(m => m.id === mid);
     if(assignee?.email && assignee.email.toLowerCase() !== (currentGoogleUser?.email || "").toLowerCase()){
-      const projName = state.projects.find(p => p.id === data.projectId)?.name || "";
       sendPushNotification(
         assignee.email,
         "タスクが割り当てられました",
         `「${title}」${projName ? `（${projName}）` : ""}`
       );
     }
-  }
+  });
 
   closeModal("taskModalOverlay");
   renderAll();
@@ -1802,7 +1901,7 @@ function renderMembers(){
   }
   el.innerHTML = `<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr));">` +
     state.members.map(m=>{
-      const taskCount = state.tasks.filter(t=>t.assigneeId===m.id && t.status!=="完了" && t.status!=="取りやめ").length;
+      const taskCount = state.tasks.filter(t=>getAssigneeIds(t).includes(m.id) && derivedTaskStatus(t)!=="完了" && t.status!=="取りやめ").length;
       const projCount = state.projects.filter(p=>(p.memberIds||[]).includes(m.id)).length;
       const initial = m.name ? m.name.charAt(0) : "?";
       return `
@@ -1852,9 +1951,9 @@ function renderMyTasks(){
   const m = state.members.find(x=>x.id===currentMemberId);
   document.getElementById("myTaskGreeting").textContent = m ? `${m.name}さんのタスク` : "タスク";
 
-  let list = state.tasks.filter(t=>t.assigneeId===currentMemberId);
-  if(myTaskFilter==="pending") list = list.filter(t=>t.status!=="完了" && t.status!=="取りやめ");
-  if(myTaskFilter==="done") list = list.filter(t=>t.status==="完了");
+  let list = state.tasks.filter(t=>getAssigneeIds(t).includes(currentMemberId));
+  if(myTaskFilter==="pending") list = list.filter(t=>getMemberStatus(t,currentMemberId)!=="完了" && t.status!=="取りやめ");
+  if(myTaskFilter==="done") list = list.filter(t=>getMemberStatus(t,currentMemberId)==="完了");
   list = list.sort((a,b)=>(a.deadline||"9999").localeCompare(b.deadline||"9999"));
 
   const el = document.getElementById("myTaskList");
@@ -1864,7 +1963,7 @@ function renderMyTasks(){
   }
   el.innerHTML = list.map(t=>{
     const overdue = isOverdue(t);
-    const done = t.status==="完了";
+    const done = getMemberStatus(t, currentMemberId)==="完了";
     return `
       <div class="my-task-item ${overdue?'overdue-item':''} ${done?'done-item':''}">
         <div>
@@ -1880,15 +1979,14 @@ function renderMyTasks(){
 function refreshAssigneeByProject(){
   if(currentRole !== "member") return;
   const projectId = document.getElementById("taskProject").value;
-  const assigneeSel = document.getElementById("taskAssignee");
+  const checks = document.querySelectorAll("#taskAssigneeList .assignee-check");
   const lockNote = document.getElementById("taskAssigneeLockNote");
   if(!projectId){
-    assigneeSel.value = currentMemberId;
-    assigneeSel.disabled = true;
-    lockNote.style.display = "block";
-  } else {
-    assigneeSel.disabled = false;
-    lockNote.style.display = "none";
+    checks.forEach(cb=>{ cb.disabled=true; cb.checked=(cb.value===currentMemberId); });
+    lockNote.style.display="block";
+  }else{
+    checks.forEach(cb=>{ cb.disabled=false; });
+    lockNote.style.display="none";
   }
 }
 
@@ -1901,11 +1999,13 @@ function openMemberTaskModal(){
 function toggleMyTaskDone(taskId){
   const t = state.tasks.find(x=>x.id===taskId);
   if(!t) return;
-  t.status = (t.status === "完了") ? "未完了" : "完了";
+  if(!t.memberStatuses) t.memberStatuses={};
+  const cur = t.memberStatuses[currentMemberId]||"未完了";
+  t.memberStatuses[currentMemberId] = cur==="完了" ? "未完了" : "完了";
+  t.status = derivedTaskStatus(t);
+  t.assigneeId = getAssigneeIds(t)[0]||"";
   fsSet("tasks", t.id, t);
-  renderMyTasks();
-  renderDashboard();
-  renderTasks();
+  renderMyTasks(); renderDashboard(); renderTasks();
 }
 function taskToggleCancel(){
   const id = document.getElementById("taskId").value;
@@ -1954,8 +2054,9 @@ function refreshFlowProjectSelect(){
 }
 
 function statusFlowClass(t){
+  const ds = derivedTaskStatus(t);
   if(isOverdue(t)) return "status-overdue";
-  if(t.status==="完了") return "status-done";
+  if(ds==="完了") return "status-done";
   if(t.status==="進行中") return "status-progress";
   return "status-notstarted";
 }
@@ -2069,7 +2170,7 @@ function buildFlowEdgesSvg(tasks, positions){
       const to = positions[t.id];
       if(!from || !to) return;
       const depTask = tasks.find(x=>x.id===depId);
-      const active = !!(depTask && depTask.status === "完了");
+      const active = !!(depTask && derivedTaskStatus(depTask) === "完了");
 
       const fromCenter = { x: from.x + from.w/2, y: from.y + from.h/2 };
       const toCenter = { x: to.x + to.w/2, y: to.y + to.h/2 };
@@ -2157,8 +2258,8 @@ function renderTaskFlow(){
         <div class="chip-led"></div>
         <div class="flow-node-content">
           <div class="ft-title">${escapeHtml(t.title)}</div>
-          <div class="ft-meta">👤 ${escapeHtml(memberName(t.assigneeId))}</div>
-          <div class="ft-meta">📅 ${t.deadline || "未設定"} ・ ${escapeHtml(t.status)}</div>
+          <div class="ft-meta">👤 ${escapeHtml(getAssigneeIds(t).map(id=>memberName(id)).join("・") || "未割当")}</div>
+          <div class="ft-meta">📅 ${t.deadline || "未設定"} ・ ${escapeHtml(derivedTaskStatus(t))}</div>
         </div>
         <div class="flow-resize-handle" onmousedown="startNodeResize(event,'${t.id}')" title="ドラッグしてサイズ変更">⌟</div>
       </div>
