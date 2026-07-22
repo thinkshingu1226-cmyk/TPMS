@@ -1406,6 +1406,25 @@ async function removeManagerEmail(key){
   renderManagerAuth();
 }
 
+function _positionPopover(pop, anchorRect){
+  pop.style.visibility = "hidden";
+  pop.style.display = "block";
+  const pw = pop.offsetWidth;
+  const ph = pop.offsetHeight;
+  const margin = 6;
+  let top = anchorRect.bottom + window.scrollY + margin;
+  let left = anchorRect.left + window.scrollX;
+  if(anchorRect.bottom + ph + margin > window.innerHeight){
+    top = anchorRect.top + window.scrollY - ph - margin;
+  }
+  if(left + pw > window.innerWidth - margin){
+    left = window.innerWidth - pw - margin;
+  }
+  if(left < margin) left = margin;
+  pop.style.top = top + "px";
+  pop.style.left = left + "px";
+  pop.style.visibility = "visible";
+}
 function showAssigneePopover(taskId, event){
   event.stopPropagation();
   const t = state.tasks.find(x=>x.id===taskId);
@@ -1414,10 +1433,7 @@ function showAssigneePopover(taskId, event){
   pop.innerHTML = getAssigneeIds(t).map(mid=>
     `<div class="status-popover-row"><span>${escapeHtml(memberName(mid))}</span></div>`
   ).join("");
-  const r = event.target.getBoundingClientRect();
-  pop.style.display = "block";
-  pop.style.top = (r.bottom + window.scrollY + 4) + "px";
-  pop.style.left = Math.min(r.left + window.scrollX, window.innerWidth - 180) + "px";
+  _positionPopover(pop, event.target.getBoundingClientRect());
 }
 function showStatusPopover(taskId, event){
   event.stopPropagation();
@@ -1453,10 +1469,7 @@ function showStatusPopover(taskId, event){
       </div>`;
     }).join("");
   };
-  const r = event.target.getBoundingClientRect();
-  pop.style.display = "block";
-  pop.style.top = (r.bottom + window.scrollY + 4) + "px";
-  pop.style.left = Math.min(r.left + window.scrollX, window.innerWidth - 180) + "px";
+  _positionPopover(pop, event.target.getBoundingClientRect());
 }
 document.addEventListener("click", ()=>{ const p=document.getElementById("statusPopover"); if(p) p.style.display="none"; });
 
