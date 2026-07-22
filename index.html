@@ -1926,16 +1926,45 @@ function renderMembers(){
         <div class="card">
           <div class="flex-center" style="margin-bottom:8px;">
             <div class="member-avatar">${escapeHtml(initial)}</div>
-            <div>
+            <div style="flex:1;">
               <div style="font-weight:600;">${escapeHtml(m.name)}</div>
               <div class="muted-text">${escapeHtml(m.email||"")}</div>
             </div>
+            <button class="btn small danger" onclick="deleteMember('${m.id}')" title="アカウントを削除">削除</button>
           </div>
           <div class="muted-text">📁 参加プロジェクト: ${projCount}件</div>
           <div class="muted-text">✅ 未完了タスク: ${taskCount}件</div>
         </div>
       `;
     }).join("") + `</div>`;
+}
+
+function deleteMember(memberId){
+  const m = state.members.find(x=>x.id===memberId);
+  if(!m) return;
+  if(!confirm(`「${m.name}」のアカウントをシステムから削除しますか？\n※ 担当タスクの割当は解除されます。再サインインすると再登録されます。`)) return;
+  // unassign from tasks
+  state.tasks.forEach(t=>{
+    const ids = getAssigneeIds(t);
+    if(ids.includes(memberId)){
+      t.assigneeIds = ids.filter(id=>id!==memberId);
+      t.assigneeId = t.assigneeIds[0]||"";
+      if(t.memberStatuses) delete t.memberStatuses[memberId];
+      t.status = derivedTaskStatus(t);
+      fsSet("tasks", t.id, t);
+    }
+  });
+  // remove from project memberIds
+  state.projects.forEach(p=>{
+    if((p.memberIds||[]).includes(memberId)){
+      p.memberIds = p.memberIds.filter(id=>id!==memberId);
+      fsSet("projects", p.id, p);
+    }
+  });
+  state.members = state.members.filter(x=>x.id!==memberId);
+  fsDel("members", memberId);
+  renderAll();
+  showToast(`「${m.name}」を削除しました`);
 }
 
 async function _ensureMemberRecord(googleUser, userName){
