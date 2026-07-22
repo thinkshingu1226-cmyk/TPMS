@@ -209,6 +209,12 @@
   }
   .flex-center{display:flex;align-items:center;}
 
+  .status-popover{
+    position:fixed;z-index:300;background:#fff;border:1px solid var(--border);
+    border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);
+    padding:10px 14px;min-width:160px;font-size:13px;
+  }
+  .status-popover-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:3px 0;}
   .toast{
     position:fixed;bottom:20px;right:20px;
     background:#1e293b;color:#fff;
@@ -830,10 +836,6 @@
       <div id="taskAssigneeList" style="max-height:140px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:6px;display:flex;flex-wrap:wrap;gap:6px;"></div>
       <div class="muted-text" id="taskAssigneeLockNote" style="display:none;margin-top:4px;">あなたのタスクとして追加されます</div>
     </div>
-    <div class="form-row" id="memberStatusesRow" style="display:none;">
-      <label>担当者の進捗</label>
-      <div id="memberStatusesList" style="display:flex;flex-direction:column;gap:4px;"></div>
-    </div>
     <div class="form-row">
       <label>先行タスク（依存関係）</label>
       <select id="taskDependsOn" multiple size="4"></select>
@@ -852,6 +854,7 @@
 
 <!-- MEMBER MODAL -->
 
+<div class="status-popover" id="statusPopover" style="display:none;"></div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1403,6 +1406,25 @@ async function removeManagerEmail(key){
   renderManagerAuth();
 }
 
+function showStatusPopover(taskId, event){
+  event.stopPropagation();
+  const t = state.tasks.find(x=>x.id===taskId);
+  if(!t) return;
+  const ids = getAssigneeIds(t);
+  const pop = document.getElementById("statusPopover");
+  if(!ids.length){ pop.style.display="none"; return; }
+  pop.innerHTML = ids.map(mid=>{
+    const ms = getMemberStatus(t, mid);
+    const bc = ms==="完了" ? "done" : "notstarted";
+    return `<div class="status-popover-row"><span>${escapeHtml(memberName(mid))}</span><span class="badge ${bc}">${ms}</span></div>`;
+  }).join("");
+  const r = event.target.getBoundingClientRect();
+  pop.style.display = "block";
+  pop.style.top = (r.bottom + window.scrollY + 4) + "px";
+  pop.style.left = Math.min(r.left + window.scrollX, window.innerWidth - 180) + "px";
+}
+document.addEventListener("click", ()=>{ const p=document.getElementById("statusPopover"); if(p) p.style.display="none"; });
+
 function showToast(msg){
   const t = document.getElementById("toast");
   t.textContent = msg;
@@ -1701,7 +1723,7 @@ function renderTasks(){
           <td>${escapeHtml(projectName(t.projectId))}</td>
           <td>${assigneeDisplay}</td>
           <td>${isOverdue(t) ? `<span class="badge overdue">${t.deadline||'-'}</span>` : (t.deadline||'-')}</td>
-          <td>${statusCell}</td>
+          <td onclick="event.stopPropagation();showStatusPopover('${t.id}',event)" style="cursor:pointer;" title="クリックで担当者別ステータス確認">${statusCell}</td>
           <td style="white-space:nowrap;">
             ${ds==='取りやめ'
               ? `<button class="btn small secondary" onclick="event.stopPropagation();setTaskStatus('${t.id}','未完了')" title="未完了に戻す">↩</button>`
@@ -1723,8 +1745,6 @@ function openTaskModal(id){
   document.getElementById("taskId").value = id || "";
   document.getElementById("taskDeleteBtn").style.display = id ? "inline-block" : "none";
   document.getElementById("taskCancelBtn").style.display = "none";
-  const memberStatusesRow = document.getElementById("memberStatusesRow");
-  const memberStatusesList = document.getElementById("memberStatusesList");
   if(id){
     const t = state.tasks.find(x=>x.id===id);
     document.getElementById("taskModalTitle").textContent = "タスクを編集";
@@ -1738,26 +1758,10 @@ function openTaskModal(id){
     refreshTaskDependsOnOptions();
     const depSel = document.getElementById("taskDependsOn");
     Array.from(depSel.options).forEach(o=>{ o.selected = (t.dependsOn||[]).includes(o.value); });
-    // Set checked state for assignee checkboxes
     const assigneeIds = getAssigneeIds(t);
     document.querySelectorAll("#taskAssigneeList .assignee-check").forEach(cb=>{
       cb.checked = assigneeIds.includes(cb.value);
     });
-    // Populate memberStatuses progress section
-    if(assigneeIds.length > 0){
-      memberStatusesRow.style.display = "";
-      memberStatusesList.innerHTML = assigneeIds.map(mid=>{
-        const ms = getMemberStatus(t, mid);
-        const badgeClass = ms === "完了" ? "done" : "notstarted";
-        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;">
-          <span style="font-size:13px;">${escapeHtml(memberName(mid))}</span>
-          <span class="badge ${badgeClass}">${escapeHtml(ms)}</span>
-        </div>`;
-      }).join("");
-    } else {
-      memberStatusesRow.style.display = "none";
-      memberStatusesList.innerHTML = "";
-    }
     refreshAssigneeByProject();
   }else{
     document.getElementById("taskModalTitle").textContent = "新規タスク";
@@ -1765,10 +1769,7 @@ function openTaskModal(id){
     document.getElementById("taskProject").value = "";
     document.getElementById("taskDeadline").value = "";
     document.getElementById("taskStatus").value = "未完了";
-    // Uncheck all checkboxes
     document.querySelectorAll("#taskAssigneeList .assignee-check").forEach(cb=>{ cb.checked=false; });
-    memberStatusesRow.style.display = "none";
-    memberStatusesList.innerHTML = "";
     refreshTaskDependsOnOptions();
     refreshAssigneeByProject();
   }
