@@ -725,7 +725,7 @@
         <div class="flow-toolbar-float" id="flowToolbarFloat">
           <div class="flow-toolbar-handle" id="flowToolbarHandle" title="ドラッグして移動">⠿</div>
           <select id="flowProjectSelect" onchange="renderTaskFlow()"></select>
-          <button class="btn small" onclick="openTaskModalFromFlow()">＋ 新規タスク</button>
+          <button class="btn small" onclick="openTaskModalFromFlow()" id="flowNewTaskBtn">＋ 新規タスク</button>
           <button class="btn secondary small" onclick="autoArrangeFlow()">🧭 自動整列</button>
           <button class="btn secondary small" onclick="toggleFlowFullscreen()" id="flowFullscreenBtn">⛶ 全画面表示</button>
           <div class="flow-zoom-controls">
@@ -2242,6 +2242,8 @@ function redrawFlowEdges(){
 }
 
 function renderTaskFlow(){
+  const flowNewBtn = document.getElementById("flowNewTaskBtn");
+  if(flowNewBtn) flowNewBtn.style.display = isReadOnly ? "none" : "";
   refreshFlowProjectSelect();
   const projectId = document.getElementById("flowProjectSelect").value;
   const svg = document.getElementById("flowSvg");
@@ -2441,6 +2443,7 @@ function handleFlowEscKey(e){
 }
 
 function startNodeDrag(e, taskId){
+  if(isReadOnly) return;
   if(e.button !== undefined && e.button !== 0) return;
   e.preventDefault();
   e.stopPropagation();
@@ -2468,6 +2471,7 @@ function startNodeDrag(e, taskId){
 }
 
 function startConnectionDrag(e, taskId){
+  if(isReadOnly) return;
   e.preventDefault();
   e.stopPropagation();
   flowDrag = { type: "connection", taskId };
@@ -2478,6 +2482,7 @@ function startConnectionDrag(e, taskId){
 }
 
 function startNodeResize(e, taskId){
+  if(isReadOnly) return;
   if(e.button !== undefined && e.button !== 0) return;
   e.preventDefault();
   e.stopPropagation();
@@ -2578,7 +2583,7 @@ function onFlowMouseUp(e){
       renderTaskFlow();
     } else {
       cleanupFlowDrag();
-      openTaskModal(taskId);
+      if(!isReadOnly) openTaskModal(taskId);
     }
   } else if(flowDrag.type === "connection"){
     const originId = flowDrag.taskId;
@@ -2638,6 +2643,7 @@ function addFlowConnection(prereqId, dependentId){
 }
 
 function flowSvgClickHandler(e){
+  if(isReadOnly) return;
   const hit = e.target.closest ? e.target.closest(".trace-hit") : null;
   if(!hit) return;
   const fromId = hit.dataset.from;
